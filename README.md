@@ -30,7 +30,8 @@ AI-Validated Image Sourcing: Automatically finds and attaches relevant images to
 
 Fully Customizable: Advanced users can directly edit the AI prompts that control every step of the generation process, allowing for infinite customization of the output style.
 
-Installation & Setup (Script-based)
+
+Installation & Setup 
 Follow these steps to get the application running on your Windows machine from the source scripts.
 
 Step 1: Install External Dependencies
@@ -54,7 +55,7 @@ Download: Get the installer from the official source: https://github.com/UB-Mann
 
 Install: Run the installer. CRITICAL: During installation, ensure you select the languages you need (at a minimum, "English" and "OSD").
 
-Step 2: Download and Set Up the Project Files
+Step 2: Download and Set Up the Project Files - Click the <>Code button in the top right, then click "Download ZIP"
 Download & Extract: Download the project .zip file and extract it to a permanent folder on your computer (e.g., C:\AnkiGenerator). This folder should contain setup.bat, run.bat, and other project files.
 
 Run the Setup Script: In the project folder, double-click the setup.bat file. This will create a local Python environment and install all the required libraries automatically. Wait for it to complete.

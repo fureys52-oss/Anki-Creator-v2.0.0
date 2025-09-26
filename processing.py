@@ -14,7 +14,6 @@ import markdown2
 
 from utils import get_api_keys_from_env, manage_log_files
 from image_finder import ImageFinder, PDFImageSource, WikimediaSource, NLMOpenISource, OpenverseSource, FlickrSource
-# --- Correctly import the new manager ---
 from model_manager import GeminiModelManager
 
 # --- Define only the necessary constants ---
@@ -40,7 +39,6 @@ NOTE_TYPE_CONFIG = {
             "name": "create_anki_card",
             "description": "Creates a single Anki card based on a conceptual chunk of facts.",
             "parameters": {
-                # --- CORRECTION: Types must be lowercase ---
                 "type": "object",
                 "properties": {
                     "Front": {"type": "string", "description": "The specific, 2nd or 3rd-order question for the card's front."},
@@ -61,7 +59,6 @@ NOTE_TYPE_CONFIG = {
             "name": "create_cloze_card",
             "description": "Creates a single Anki cloze-deletion card from a fact.",
             "parameters": {
-                # --- CORRECTION: Types must be lowercase ---
                 "type": "object",
                 "properties": {
                     "Context_Question": {"type": "string", "description": "A simple question that provides context for the cloze sentence."},
@@ -75,9 +72,36 @@ NOTE_TYPE_CONFIG = {
     }
 } 
 
+# --- Text Sanitization and Formatting Engine ---
+def sanitize_text(text: str) -> str:
+    """Cleans text from common PDF/AI artifacts like weird unicode and inconsistent newlines."""
+    if not isinstance(text, str):
+        return ""
+    
+    # Normalize newlines and strip leading/trailing whitespace
+    text = text.replace('\\n', '\n').strip()
+    
+    # Unicode character normalization
+    replacements = {
+        '\u201c': '"', '\u201d': '"',  # Smart quotes to standard quotes
+        '\u2018': "'", '\u2019': "'",  # Smart single quotes to standard apostrophe
+        '\u2013': '-', '\u2014': '-',  # En-dash and Em-dash to standard hyphen
+        '\u2022': '-',                # Bullet points to hyphens for markdown
+        '\u00a0': ' ',                # Non-breaking space to regular space
+        '\u00b0': '°',                # Degree symbol
+        'ﬁ': 'fi', 'ﬂ': 'fl',      # Ligatures
+    }
+    for find, replace in replacements.items():
+        text = text.replace(find, replace)
+        
+    # Consolidate multiple newlines into a single one for cleaner markdown parsing
+    text = re.sub(r'\n{2,}', '\n', text)
+    return text
 
-# --- HTML Engine ---
 def build_html_from_tags(text: str, enabled_colors: List[str]) -> str:
+    """Converts custom tags and markdown into Anki-compatible HTML."""
+    clean_text = sanitize_text(text)
+    
     tag_map = {
         "<pos>": ("positive_key_term", f"<font color='{HTML_COLOR_MAP['positive_key_term']}'><b>"), "</pos>": ("positive_key_term", "</b></font>"),
         "<neg>": ("negative_key_term", f"<font color='{HTML_COLOR_MAP['negative_key_term']}'><b>"), "</neg>": ("negative_key_term", "</b></font>"),
@@ -85,14 +109,12 @@ def build_html_from_tags(text: str, enabled_colors: List[str]) -> str:
         "<tip>": ("mnemonic_tip", f"<font color='{HTML_COLOR_MAP['mnemonic_tip']}'>"), "</tip>": ("mnemonic_tip", "</font>"),
     }
     for tag, (key, replacement) in tag_map.items():
-        text = text.replace(tag, replacement if key in enabled_colors else "")
+        clean_text = clean_text.replace(tag, replacement if key in enabled_colors else "")
 
-    # Let markdown2 handle list creation and line breaks properly.
-    # The "cuddled-lists" extra ensures that lists are tight.
-    # The "break-on-newline" extra will convert single newlines to <br> tags correctly.
-    html = markdown2.markdown(text, extras=["cuddled-lists", "break-on-newline"])
+    # Let markdown2 handle list creation and line breaks.
+    html = markdown2.markdown(clean_text, extras=["cuddled-lists", "break-on-newline"])
     
-    # This removes any lingering paragraph tags that markdown2 might add, which cause extra space.
+    # Remove any lingering paragraph tags that cause extra space.
     html = html.replace("<p>", "").replace("</p>", "").strip()
     return html
 
@@ -103,7 +125,6 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
     tesseract_warning_issued = False
 
     def is_text_meaningful(text: str, min_chars: int = 30) -> bool:
-        """Checks if a string contains a minimum number of alphanumeric characters."""
         alphanumeric_chars = re.sub(r'[^a-zA-Z0-9]', '', text)
         return len(alphanumeric_chars) >= min_chars
 
@@ -114,7 +135,6 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
 
     cache_file = pdf_cache_dir / f"{pdf_hash}_ocr.txt"
     if cache_file.exists():
-        # A bit of a hack to let the user know OCR was used on a cached file
         cached_text = cache_file.read_text(encoding='utf-8')
         if "--- OCR Log ---" in cached_text:
              ocr_log.append("Using cached text that was generated with OCR on a previous run.")
@@ -156,15 +176,10 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
     if page_ocr_logs:
         ocr_log.append("\n--- OCR Processing Log ---")
         ocr_log.extend(page_ocr_logs)
-        # Embed the log in the cache file itself for future reference
         text_content += "\n--- OCR Log ---\n" + "\n".join(page_ocr_logs)
 
     cache_file.write_text(text_content, encoding='utf-8')
     return text_content, ocr_log
-
-def clean_pdf_text(raw_text: str) -> str:
-    cleaned_text = re.sub(r'\n{3,}', '\n\n', raw_text)
-    return cleaned_text
 
 # --- Gemini API Call with Function Calling Support ---
 def call_gemini(prompt: str, api_key: str, model_name: str, tools: Optional[List[Dict]] = None) -> Any:
@@ -299,14 +314,12 @@ class DeckProcessor:
             if not self._process_pdfs(): return
             if self.image_finder:
                 self.log("\n--- Pre-caching images from PDF(s) ---")
-                # Create a temporary instance just to use its helper method
                 pdf_image_extractor = PDFImageSource()
                 for pdf_path in self.pdf_paths:
                     extracted = pdf_image_extractor._extract_images_and_context(pdf_path)
                     if extracted:
                         self.pdf_images_cache.extend(extracted)
                 self.log(f"Found and cached {len(self.pdf_images_cache)} images from source PDF(s).")
-            # ------------------------------------
             
             structured_facts = self._extract_facts()
             if not structured_facts:
@@ -347,7 +360,6 @@ class DeckProcessor:
         """Calls the curator AI and robustly parses the page numbers from its response."""
         self.log("\n--- AI Pass 0: Curating relevant pages ---")
         
-        # Dynamically build instructions based on UI checkboxes
         retain_cases, retain_tables = self.curator_options['retain_case_studies'], self.curator_options['retain_tables']
         case_study_instruction = "You MUST classify pages that are primarily case studies or clinical vignettes as 'Core Content'." if retain_cases else "You MUST classify pages that are primarily case studies or clinical vignettes as 'Superfluous'."
         table_instruction = "You MUST classify pages that consist mainly of large tables, charts, or diagrams as 'Core Content'." if retain_tables else "You MUST classify pages that consist mainly of large tables, charts, or diagrams as 'Superfluous'."
@@ -365,7 +377,6 @@ class DeckProcessor:
             return None
 
         try:
-            # Robustly find all numbers and number ranges (e.g., "3", "5-7", "12")
             found_pages = set()
             matches = re.findall(r'(\d+)(?:-(\d+))?', response)
             if not matches:
@@ -374,10 +385,10 @@ class DeckProcessor:
 
             for start, end in matches:
                 start_num = int(start)
-                if end: # It's a range like "5-7"
+                if end:
                     end_num = int(end)
                     found_pages.update(range(start_num, end_num + 1))
-                else: # It's a single number
+                else:
                     found_pages.add(start_num)
             
             if not found_pages: return None
@@ -391,7 +402,7 @@ class DeckProcessor:
 
     def _extract_facts(self) -> Optional[List[Dict[str, Any]]]:
         self.log("\n--- Cleaning and Structuring Text ---")
-        cleaned_text = clean_pdf_text(self.full_text)
+        cleaned_text = sanitize_text(self.full_text)
         
         curated_pages_list = self._curate_pages()
 
@@ -444,6 +455,9 @@ class DeckProcessor:
                         try:
                             facts_in_batch = json.loads(json_string)
                             if isinstance(facts_in_batch, list):
+                                for fact in facts_in_batch:
+                                    if isinstance(fact, dict) and 'fact' in fact:
+                                        fact['fact'] = sanitize_text(fact['fact'])
                                 with lock:
                                     all_extracted_facts.extend(facts_in_batch)
                                 was_successful = True
@@ -486,7 +500,6 @@ class DeckProcessor:
             tools = [{"function_declarations": [NOTE_TYPE_CONFIG['basic']['function_tool']]}]
         elif "Cloze" in self.card_type:
             atomic_facts_with_pages = ""
-            # This logic correctly handles potentially non-sequential page numbers
             pages_to_facts = {}
             for item in facts_json_input:
                 pg = item['page_number']
@@ -511,7 +524,7 @@ class DeckProcessor:
             self.log(f"\nERROR: AI card generation failed. Reason: {card_generation_result}"); return None
 
         if card_generation_result:
-            self.ai_cache_dir.mkdir(exist_ok=True) # Add this line
+            self.ai_cache_dir.mkdir(exist_ok=True)
             ai_cache_file.write_text(json.dumps(card_generation_result, indent=2), encoding='utf-8')
             self.log("Saved new AI response to cache.")
 
@@ -527,22 +540,23 @@ class DeckProcessor:
         self.log("\n--- Parsing AI Function Call Response ---")
         final_cards = []
         for call in card_function_calls:
-            # The AI response for function calls is nested under 'functionCall'
             call = call.get('functionCall', call)
             args = call.get("args", {})
             card = None
 
+            sanitized_args = {k: sanitize_text(v) if isinstance(v, str) else v for k, v in args.items()}
+
             if call.get("name") == "create_anki_card":
-                page_nums = sorted(list(set(args.get("Page_numbers", [1]))))
+                page_nums = sorted(list(set(sanitized_args.get("Page_numbers", [1]))))
                 card = {
-                    "type": "basic", "front": args.get("Front"), "back_text": args.get("Back"),
-                    "image_search_query": args.get("Search_Query"), "page_numbers": page_nums
+                    "type": "basic", "front": sanitized_args.get("Front"), "back_text": sanitized_args.get("Back"),
+                    "image_search_query": sanitized_args.get("Search_Query"), "page_numbers": page_nums
                 }
             elif call.get("name") == "create_cloze_card":
                 card = {
-                    "type": "cloze", "original_question": args.get("Context_Question"),
-                    "sentence_html": args.get("Sentence_HTML"), "image_search_query": args.get("Search_Query"),
-                    "page_numbers": [int(re.search(r'\d+', args.get("Source_Page", "1")).group())]
+                    "type": "cloze", "original_question": sanitized_args.get("Context_Question"),
+                    "sentence_html": sanitized_args.get("Sentence_HTML"), "image_search_query": sanitized_args.get("Search_Query"),
+                    "page_numbers": [int(re.search(r'\d+', sanitized_args.get("Source_Page", "1")).group())]
                 }
 
             if card: final_cards.append(card)
@@ -567,33 +581,24 @@ class DeckProcessor:
         self.log(f"\n--- Adding Cards to Deck: '{self.deck_name}' ---")
         cards_added, cards_skipped, cards_failed = 0, 0, 0
         
-        # tqdm gives us the progress bar in the UI
         for card_data in self.progress.tqdm(final_cards, desc="Adding Cards to Anki"):
             try:
                 image_html = None
                 
-                # Get the complete list of pages this card was sourced from.
-                # This will be used for the accurate source text on the card itself.
                 full_source_page_numbers = card_data.get("page_numbers", [])
 
-                # Check if an image search is warranted
                 if self.image_finder and card_data.get("image_search_query"):
-                    
-                    # 1. Create a list of all possible search queries for the multi-query search.
                     queries = [
                         card_data.get("image_search_query"),
                         card_data.get("simple_search_query")
                     ]
-                    # Filter out any empty or None values to get the final list.
                     search_queries = [q for q in queries if q]
 
-                    # 2. Apply the heuristic to create a "focused" list of pages for the fast Tier 1 search.
                     if len(full_source_page_numbers) > 3:
                         focused_search_pages = full_source_page_numbers[:3]
                     else:
                         focused_search_pages = full_source_page_numbers
 
-                    # 3. Call the image finder with all the necessary arguments for the tiered search.
                     image_html = self.image_finder.find_best_image(
                         query_texts=search_queries,
                         clip_model=self.clip_model,
@@ -603,13 +608,11 @@ class DeckProcessor:
                         full_source_pages=full_source_page_numbers
                     )
 
-                # Use the complete, accurate list of pages for the source text.
                 page_str = f"Pgs {', '.join(map(str, full_source_page_numbers))}"
                 source_text = f"{Path(self.pdf_paths[0]).stem} - {page_str}"
 
                 fields, final_note_type_key = {}, None
 
-                # Build the fields for a "Basic" card
                 if card_data['type'] == 'basic':
                     final_note_type_key = 'basic'
                     fields = {
@@ -618,7 +621,6 @@ class DeckProcessor:
                         "Source": source_text,
                         "Image": image_html or ""
                     }
-                # Build the fields for a "Cloze" card
                 elif card_data['type'] == 'cloze':
                     sentence_html = card_data["sentence_html"]
                     if not sentence_html or "{{" not in sentence_html:
@@ -633,7 +635,6 @@ class DeckProcessor:
                     cards_skipped += 1
                     continue
 
-                # Add the finalized note to Anki
                 _, error = add_note_to_anki(self.deck_name, final_note_type_key, fields, self.pdf_paths[0], self.custom_tags)
                 if error:
                     if "duplicate" in error:
@@ -645,14 +646,12 @@ class DeckProcessor:
                     cards_added += 1
             except Exception as e:
                 cards_failed += 1
-                # Log a truncated version of the card data to avoid flooding the log
                 self.log(f"ERROR processing card data: '{str(card_data)[:500]}...' | Exception: {e}")
 
         self.log(f"\n--- Final Tally ---\nCards Added: {cards_added}\nCards Skipped/Failed: {cards_skipped + cards_failed}")
 
-# --- Main Generator Function (CORRECTED) ---
+# --- Main Generator Function ---
 def generate_all_decks(max_decks: int, *args):
-    # This robustly unpacks all arguments passed from the UI
     master_files, generate_button, log_output, clip_model, *remaining_args = args
     
     log_history = ""
@@ -673,7 +672,6 @@ def generate_all_decks(max_decks: int, *args):
         log_file_path = LOG_DIR / f"session_log_{session_timestamp}.txt"
         cache_dirs = (PDF_CACHE_DIR, AI_CACHE_DIR)
 
-        # Correctly separate deck inputs from other settings
         deck_inputs_flat = remaining_args[:max_decks * 2]
         settings_and_prompts = remaining_args[max_decks * 2:]
         
@@ -733,3 +731,4 @@ def generate_all_decks(max_decks: int, *args):
             logger(f"Session log saved to: {log_file_path}")
         final_ui_state[0] = log_history
         yield tuple(final_ui_state)
+

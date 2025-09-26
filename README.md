@@ -30,7 +30,8 @@ AI-Validated Image Sourcing: Automatically finds and attaches relevant images to
 
 Fully Customizable: Advanced users can directly edit the AI prompts that control every step of the generation process, allowing for infinite customization of the output style.
 
-Installation & Setup (Script-based)
+
+Installation & Setup 
 Follow these steps to get the application running on your Windows machine from the source scripts.
 
 Step 1: Install External Dependencies
@@ -54,7 +55,8 @@ Download: Get the installer from the official source: https://github.com/UB-Mann
 
 Install: Run the installer. CRITICAL: During installation, ensure you select the languages you need (at a minimum, "English" and "OSD").
 
-Step 2: Download and Set Up the Project Files
+Step 2: Download and Set Up the Project Files - Click the <>Code button in the top right, then click "Download ZIP"
+
 Download & Extract: Download the project .zip file and extract it to a permanent folder on your computer (e.g., C:\AnkiGenerator). This folder should contain setup.bat, run.bat, and other project files.
 
 Run the Setup Script: In the project folder, double-click the setup.bat file. This will create a local Python environment and install all the required libraries automatically. Wait for it to complete.
@@ -62,7 +64,8 @@ Run the Setup Script: In the project folder, double-click the setup.bat file. Th
 Step 3: Configure Your API Key
 Rename the Template: In the project folder, find the file named .env.template and rename it to .env.
 
-Get Your API Key: Go to Google AI Studio to get your free Google Gemini API Key.
+Get Your API Key: Go to Google AI Studio to get your free Google Gemini API Key. https://aistudio.google.com/
+Click the GET API Key button at the bototm left.
 
 Edit the .env File:
 
@@ -78,6 +81,11 @@ IMPORTANT: Make sure the main Anki application is open and running on your deskt
 In the project folder, double-click the run.bat file.
 
 A command prompt window will appear, followed shortly by your default web browser, which will open a new tab with the application's interface.
+
+If you want to have a desktop shortcut, also run create_shortcut.bat
+
+
+
 
 How to Use the Application
 The interface is divided into a few key areas.
@@ -110,9 +118,13 @@ Enabled Semantic Colors:
 
 The AI uses special tags (<pos>, <neg>, etc.) to color-code key terms on your cards. Deselect any colors you don't want it to use.
 
+
+
 Custom Tags (Optional):
 
 Add any Anki tags you want applied to all generated cards, separated by commas (e.g., #Biology, #Midterm_1, #High-Yield).
+
+
 
 3. Running the Generator
 Generate All Decks: Once your PDFs are uploaded and settings are configured, click this button to start the process.
@@ -122,6 +134,8 @@ Session Log: This text box provides a real-time log of the entire process, from 
 Cancel: Stops the current generation process.
 
 Start New Batch: Clears all uploaded files and logs, allowing you to start fresh without restarting the application.
+
+
 
 Advanced Usage (Prompts Tab)
 This section is for users who want to fine-tune the AI's behavior. Warning: Editing prompts can break the application if the expected output format is changed.
@@ -137,6 +151,9 @@ Fact Extractor Prompt: This controls how the AI extracts individual facts from t
 Card Builder Prompts: Each of these corresponds to one of the "Card Type" options and dictates the final structure and style of the questions and answers.
 
 Reset All Prompts to Default: If you make a mistake, this button will restore all prompts to their original state.
+
+
+
 
 Troubleshooting
 "CRITICAL ERROR: Could not connect to Anki...":

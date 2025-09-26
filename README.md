@@ -54,6 +54,7 @@ AnkiConnect: Open Anki, go to Tools > Add-ons, click "Get Add-ons..." and paste 
 Download: Get the installer from the official source: https://github.com/UB-Mannheim/tesseract/wiki.
 
 Install: Run the installer. CRITICAL: During installation, ensure you select the languages you need (at a minimum, "English" and "OSD").
+When you install tesseract, please install it specifically to this file location. This is already the default, but it is key: C:\Program Files\Tesseract-OCR\tesseract.exe
 
 Step 2: Download and Set Up the Project Files - Click the <>Code button in the top right, then click "Download ZIP"
 

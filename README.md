@@ -65,15 +65,13 @@ Run the Setup Script: In the project folder, double-click the setup.bat file. Th
 Step 3: Configure Your API Key
 Rename the Template: In the project folder, find the file named .env.template and rename it to .env.
 
-1.  Go to the [Google Cloud Console] (https://console.cloud.google.com/).
-2.  Create a new project (or select an existing one).
-3.  **Crucial Step:** In the search bar at the top, search for **"Generative Language API"**.
-4.  Click on the result and then click the **"Enable"** button. You must do this for your API key to have permission to list and use the models.
-5.  Navigate to "APIs & Services" -> "Credentials".
-6.  Click "+ CREATE CREDENTIALS" -> "API key".(or use this link: https://console.cloud.google.com/apis/credentials)
-7.  Copy your new API key.
-8.  In the project folder, rename `env.template` to `.env`.
-9.  Open the `.env` file and paste your key after `GEMINI_API_KEY=`.
+1. Go to aistudio.google.com
+2. Click Get API KEY on the bottom left
+3. Click Create API Key on the top right in the new screen
+4. Create a new project, name it whatever you want.
+5. Name your key whatever you like, and press create key.
+6. A new API key will pop up at the top of the same window.
+7. Click 'copy API key' on the right hand side of that box.
 
 Edit the .env File:
 

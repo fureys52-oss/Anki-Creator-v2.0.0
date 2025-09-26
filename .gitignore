@@ -252,3 +252,5 @@ test_logs/
 .vscode/
 .idea/
 .vs/
+
+!.env.template

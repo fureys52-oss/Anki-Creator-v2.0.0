@@ -63,7 +63,8 @@ Run the Setup Script: In the project folder, double-click the setup.bat file. Th
 Step 3: Configure Your API Key
 Rename the Template: In the project folder, find the file named .env.template and rename it to .env.
 
-Get Your API Key: Go to Google AI Studio to get your free Google Gemini API Key.
+Get Your API Key: Go to Google AI Studio to get your free Google Gemini API Key. https://aistudio.google.com/
+Click the GET API Key button at the bototm left.
 
 Edit the .env File:
 

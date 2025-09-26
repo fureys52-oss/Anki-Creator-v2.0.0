@@ -71,7 +71,8 @@ Core Rules & Parameters:
 
 1.  **Comprehensive Coverage and Grouping:** Your primary goal is to ensure that every atomic fact from the input is used to inform the creation of at least one card. You must logically group facts based on shared themes, mechanisms, or clinical concepts. It is permissible to use a single crucial fact in more than one card if it is central to understanding multiple distinct concepts.
 
-2.  **Context-Aware Chunking by Content Size:** Your absolute limits for the "Back" of a card are 200-1000 characters. Within this range, you must dynamically select a target size based on the conceptual complexity of the grouped facts. Strive to create cards in the Integrative Concepts range whenever possible, as this is the primary learning goal.
+2.  **Context-Aware Chunking by Content Size:** Your absolute limits for the "Back" of a card are 200-1000 characters. Within this range, you must dynamically select a target size based on the conceptual complexity of the grouped facts. Use about 200-400 characters for simpler concepts, use about 400-800 characters for the ideal chunking amount, and use 800-1000 characters for concepts that are extensive and need to be thoroughly connected.
+You should strive to use the 400-800 character range most of the time. Save the 200-400 and 800-1000 character lengths for situations and cards where you find it logically appropriate to use those ranges.
 
 3.  **Question Generation (Front):** The "Front" must be a specific, 2nd or 3rd-order question that exhaustively prompts for the information on the "Back". Use varied question styles: "Explain the mechanism...", "Compare and contrast...", "A patient presents with...", or "Why is...".
 

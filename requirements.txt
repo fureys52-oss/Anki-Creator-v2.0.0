@@ -1,0 +1,49 @@
+# =====================================================================
+# Core Application & UI
+# =====================================================================
+
+# Used to create the web-based user interface
+gradio
+
+# The core progress bar library, used by Gradio for tracking
+tqdm
+
+# =====================================================================
+# AI & Machine Learning
+# =====================================================================
+
+# Provides easy access to the CLIP model for image validation
+sentence-transformers
+
+# The core deep learning framework required by sentence-transformers
+# Note: For GPU support, you may need to install a specific CUDA version
+# See: https://pytorch.org/get-started/locally/
+torch
+
+# Optional: A high-speed file downloader for Hugging Face models.
+# Makes the first-time model download much faster.
+hf_transfer
+
+# =====================================================================
+# Data Processing & Utilities
+# =====================================================================
+
+# Used for all API calls (Gemini, Wikimedia, NLM, etc.)
+requests
+
+# Used for parsing PDF documents to extract text and images
+PyMuPDF
+
+# Python Imaging Library, used for opening and optimizing images
+Pillow
+
+# The Python wrapper for the Tesseract OCR engine.
+# IMPORTANT: This library requires you to install the Tesseract engine
+# on your system separately. See the project's README for instructions.
+pytesseract
+
+# Used to convert the AI's markdown-formatted answers into HTML for Anki
+markdown2
+
+# Used to load API keys and other secrets from the .env file
+python-dotenv

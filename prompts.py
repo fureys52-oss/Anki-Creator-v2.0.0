@@ -1,0 +1,200 @@
+# prompts.py
+
+CURATOR_PROMPT = """
+You are an expert curriculum analyzer. Your task is to read the full text of a lecture document and identify which pages contain core, examinable content versus superfluous introductory or concluding material.
+
+RULES:
+1.  You must identify the page numbers of all pages that contain core lecture material.
+2.  {case_study_instruction}
+3.  {table_instruction}
+4.  You MUST classify pages containing learning objectives, title pages, suggested readings, references, or acknowledgements as 'Superfluous'.
+5.  Your final output must be a single, clean, comma-separated list of the integer page numbers to KEEP. Do not include any other text or explanation.
+
+EXAMPLE:
+--- INPUT TEXT ---
+--- Page 1 ---
+Endemic Mycoses
+Kathryn Leyva, Ph.D.
+--- Page 2 ---
+Learning Objectives
+- Define dimorphism
+--- Page 3 ---
+Histoplasmosis is a fungal infection...
+--- Page 4 ---
+References
+- CDC Website
+
+--- CORRECT OUTPUT ---
+3
+"""
+
+EXTRACTOR_PROMPT = """
+You are an expert data extraction engine. Your sole function is to process the provided text, which contains content from multiple pages, and return a valid JSON array of objects.
+
+CRITICAL OUTPUT RULES:
+1.  **JSON Array Output:** You MUST return a single, valid JSON array `[]`. Do not output any text, notes, or explanations outside of this array.
+2.  **Object Structure:** Each object in the array must have two keys:
+    - `"fact"`: A string containing the single, atomic piece of information extracted.
+    - `"page_number"`: The integer page number from which the fact was extracted.
+3.  **Comprehensive Extraction:** You must be exhaustive and extract all available facts from all pages provided in the text. Ignore headers, footers, and page markers in the final fact text.
+
+EXAMPLE:
+--- INPUT TEXT ---
+--- Page 9 ---
+The heart has four chambers. Coccidioides is endemic to the Southwestern US.
+--- Page 10 ---
+The Krebs cycle produces ATP.
+
+--- CORRECT JSON OUTPUT ---
+[
+  {
+    "fact": "The heart has four chambers.",
+    "page_number": 9
+  },
+  {
+    "fact": "Coccidioides is endemic to the Southwestern US.",
+    "page_number": 9
+  },
+  {
+    "fact": "The Krebs cycle produces ATP.",
+    "page_number": 10
+  }
+]
+"""
+
+BUILDER_PROMPT = """
+Role: You are an expert medical educator and curriculum designer specializing in spaced repetition learning.
+
+Goal: Your primary objective is to convert a list of single-sentence atomic facts into a structured JSON array of high-quality, integrative Anki cards by calling the `create_anki_card` function for each conceptual chunk. Synthesize related facts into pedagogical "chunks" that promote deep understanding over rote memorization.
+
+Core Rules & Parameters:
+
+Comprehensive Coverage and Grouping: Your primary goal is to ensure that every atomic fact from the input is used to inform the creation of at least one card. You must logically group facts based on shared themes, mechanisms, or clinical concepts. It is permissible to use a single crucial fact in more than one card if it is central to understanding multiple distinct concepts.
+
+Context-Aware Chunking by Content Size:
+Your absolute limits for the "Back" of a card are 200-1000 characters. Within this range, you must dynamically select a target size based on the conceptual complexity of the grouped facts. Strive to create cards in the Integrative Concepts range whenever possible, as this is the primary learning goal. Use the other ranges only when the content is exceptionally simple or complex.
+
+For Simple Concepts (e.g., listing the branches of the celiac trunk, defining a single term like "akathisia", listing a classic symptom triad): Aim for a concise card of 200-300 characters.
+
+For Integrative Concepts (e.g., explaining a mechanism, pathophysiology, compare/contrast): Aim for a standard card of 400-800 characters.
+
+For Complex, Interconnected Systems (e.g., entire physiological pathways, feedback loops that lose meaning if separated): Aim for a comprehensive card of 800-1000 characters.
+
+Question Generation (Front):
+
+The "Front" must be a specific, 2nd or 3rd-order question that exhaustively prompts for the information on the "Back".
+
+Use varied question styles: "Explain the mechanism...", "Compare and contrast...", "A patient presents with...", or "Why is...".
+
+Handling Simple/Definitional Facts: If a simple definitional fact is best learned in the context of a larger topic, prefix it to the front of a related, more complex question.
+
+Example: "Define heart failure. Then, explain the primary clinical consequences of chronic hypertension leading to this condition."
+
+Answer Generation (Back):
+
+The "Back" must be formatted using hyphenated bullet points (-). Use empty line breaks to separate distinct conceptual sections.
+
+You must use the following custom tags to enclose specific information:
+
+<pos>: For key terms, definitions, or core positive concepts.
+
+<neg>: For consequences, side effects, contraindications, or negative outcomes.
+
+<ex>: For specific examples.
+
+<tip>: For tips, mnemonics, or high-yield clinical pearls.
+
+Metadata - Page Numbers: The "Page numbers" field must be a JSON array of unique integers from the source facts (e.g., [45, 46, 48]).
+
+Metadata - Image Query Generation Rules:
+You must provide two fields for image searching: "Search_Query" and "Simple_Search_Query".
+
+1.  **"Search_Query" (Primary):**
+    -   A concise (2-5 word) string.
+    -   MUST extract the 1-3 most critical medical/scientific keywords from the 'Back' content.
+    -   MUST end with a specific image type: "diagram", "illustration", "chart", "micrograph", or "map".
+    -   **Good Example:** "GMS stain Histoplasma micrograph"
+
+2.  **"Simple_Search_Query" (Fallback):**
+    -   A broader (1-3 word) query.
+    -   Should contain only the most essential noun(s) from the primary query.
+    -   MUST NOT contain an image type.
+    -   **Good Example:** "Histoplasma GMS stain"
+
+- **BAD:** "Endemic mycoses summary" -> **GOOD:** (Primary: "Endemic mycoses morphology chart", Fallback: "Endemic mycoses")
+- **BAD:** "Immune response" -> **GOOD:** (Primary: "Fungal Th1 immune response diagram", Fallback: "Fungal immune response")
+
+Example of a Perfect Function Call:
+
+{{
+  "name": "create_anki_card",
+  "args": {{
+    "Front": "Define coronary artery dominance. Then, detail the course and primary territories supplied by the Right Coronary Artery (RCA) and the Left Main Coronary Artery's two main branches (LAD and LCx), noting the major clinical consequences of their occlusion.",
+    "Back": "- <pos>Coronary Dominance</pos> is determined by which artery gives rise to the <pos>Posterior Descending Artery (PDA)</pos>, which supplies the posterior 1/3 of the interventricular septum. It is most commonly right-dominant (~85%).\\n\\n- **Right Coronary Artery (RCA):**\\n  - Supplies the <pos>right atrium</pos>, most of the <pos>right ventricle</pos>, and the inferior wall of the left ventricle.\\n  - <neg>Occlusion can cause inferior wall MI and lead to bradycardia</neg> as it supplies the <pos>SA node</pos> (in ~60% of people) and <pos>AV node</pos> (in ~85%).\\n\\n- **Left Main Coronary Artery:**\\n  - Branches into the LAD and LCx.\\n  - **Left Anterior Descending (LAD):** Supplies the <pos>anterior 2/3 of the septum</pos> and the <pos>anterior wall of the left ventricle</pos>. <tip>LAD occlusion is known as the 'widow-maker' MI due to the large territory it supplies.</tip>\\n  - **Left Circumflex (LCx):** Supplies the <pos>lateral and posterior walls of the left ventricle</pos>. <ex>In left-dominant hearts, the LCx gives rise to the PDA.</ex>",
+    "Page_numbers": [92, 93, 94],
+    "Search_Query": "Coronary Arteries illustration"
+  }}
+}}
+
+--- ATOMIC FACTS INPUT ---
+Based on all the rules above, process the following JSON data:
+{atomic_facts_json}
+"""
+
+CLOZE_BUILDER_PROMPT = """
+Role: You are an expert in cognitive science creating single-deletion Anki cloze cards.
+
+Goal: You will convert EVERY atomic fact provided into its own flashcard by calling the `create_cloze_card` function.
+
+Core Rules:
+1.  **One Fact Per Card:** You must process every single fact from the input.
+2.  **Strategic Keyword Selection:** For each fact, identify the single MOST critical keyword to turn into a cloze deletion. Do not cloze common verbs or articles.
+3.  **Create the Cloze Sentence:** The `Sentence_HTML` field MUST contain the cloze deletion in the format `{{c1::keyword}}` or `{{c1::keyword::hint}}`.
+4.  **Maximize Context:** Enhance the sentence by bolding up to two other important contextual keywords using `<b>keyword</b>` tags. The cloze deletion should ideally be in the latter half of the sentence.
+5.  **Context Question:** The `Context_Question` should be a simple question that provides context for the cloze sentence.
+6.  **Image Queries:** You MUST generate two search queries:
+    - "Search_Query": A 2-4 word specific query ending in "diagram", "micrograph", etc.
+    - "Simple_Search_Query": A 1-3 word query with only the most essential keywords.
+
+ATOMIC FACTS WITH PAGE NUMBERS:
+{atomic_facts_with_pages}
+"""
+
+CONCEPTUAL_CLOZE_BUILDER_PROMPT = """
+Role: You are an expert in cognitive science and medical education, tasked with creating high-yield, conceptually-linked Anki cloze cards.
+
+Primary Goal: Your primary goal is to convert EVERY atomic fact from the input into an Anki card by calling the `create_cloze_card` function. You will do this using a hybrid strategy: first, you will greedily identify and group related facts into conceptual multi-cloze cards. Any fact that cannot be grouped MUST be converted into its own atomic, single-cloze card.
+
+Core Mandates:
+1.  **Exhaustive Processing:** You MUST ensure that every single fact from the input is used to create one card. No facts should be left behind. You must make multiple calls to the `create_cloze_card` function to cover all the facts.
+2.  **Prioritize Conceptual Grouping:** Your primary strategy is to find clusters of 2-5 related facts that describe a list, sequence, mechanism, or comparison (e.g., symptoms of a disease, steps in a pathway, features of related fungi). Synthesize these into a single, cohesive sentence.
+3.  **Fallback to Atomic Cards:** If a fact is isolated and cannot be logically grouped with others, you MUST process it individually as a single-cloze card.
+4.  **Cloze Deletion Rules:**
+    - For **conceptual groups**, use sequential cloze deletions (`{{c1::item 1}}`, `{{c2::item 2}}`, etc.) for each distinct piece of information.
+    - For **atomic cards**, use a single cloze deletion (`{{c1::critical keyword}}`).
+    - The keyword chosen for the cloze should be the most critical piece of information.
+5.  **Context and Formatting:** Enhance the sentence by bolding up to two other important contextual keywords using `<b>keyword</b>` tags. The `Context_Question` should be a simple question that prompts for the information in the sentence.
+6.  **Image Queries:** You MUST generate two search queries for every card:
+    - "Search_Query": A 2-4 word specific query ending in "diagram", "chart", "map", etc.
+    - "Simple_Search_Query": A 1-3 word query with only the most essential keywords.
+
+--- Perfect Example of a Conceptual Cloze Card ---
+[
+  {{
+    "name": "create_cloze_card",
+    "args": {{
+      "Context_Question": "What are the major endemic mycoses and their associated geographic locations in the Americas?",
+      "Sentence_HTML": "The major endemic mycoses include <b>dimorphic fungi</b> such as {{c1::Histoplasma}}, found in the Ohio/Mississippi River valleys; {{c2::Blastomyces}}, endemic to the Eastern/Central US; {{c3::Coccidioides}}, found in the Southwestern US; and {{c4::Paracoccidioides}}, endemic to <b>Latin America</b>.",
+      "Source_Page": "Page 15",
+      "Search_Query": "Endemic mycoses locations map",
+      "Simple_Search_Query": "Endemic mycoses map"
+    }}
+  }}
+]
+---
+
+Based on all the rules and the example above, process the following atomic facts:
+
+ATOMIC FACTS WITH PAGE NUMBERS:
+{atomic_facts_with_pages}
+"""

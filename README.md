@@ -54,6 +54,7 @@ AnkiConnect: Open Anki, go to Tools > Add-ons, click "Get Add-ons..." and paste 
 Download: Get the installer from the official source: https://github.com/UB-Mannheim/tesseract/wiki.
 
 Install: Run the installer. CRITICAL: During installation, ensure you select the languages you need (at a minimum, "English" and "OSD").
+When you install tesseract, please install it specifically to this file location. This is already the default, but it is key: C:\Program Files\Tesseract-OCR\tesseract.exe
 
 Step 2: Download and Set Up the Project Files - Click the <>Code button in the top right, then click "Download ZIP"
 
@@ -64,8 +65,15 @@ Run the Setup Script: In the project folder, double-click the setup.bat file. Th
 Step 3: Configure Your API Key
 Rename the Template: In the project folder, find the file named .env.template and rename it to .env.
 
-Get Your API Key: Go to Google AI Studio to get your free Google Gemini API Key. https://aistudio.google.com/
-Click the GET API Key button at the bototm left.
+1.  Go to the [Google Cloud Console] (https://console.cloud.google.com/).
+2.  Create a new project (or select an existing one).
+3.  **Crucial Step:** In the search bar at the top, search for **"Generative Language API"**.
+4.  Click on the result and then click the **"Enable"** button. You must do this for your API key to have permission to list and use the models.
+5.  Navigate to "APIs & Services" -> "Credentials".
+6.  Click "+ CREATE CREDENTIALS" -> "API key".(or use this link: https://console.cloud.google.com/apis/credentials)
+7.  Copy your new API key.
+8.  In the project folder, rename `env.template` to `.env`.
+9.  Open the `.env` file and paste your key after `GEMINI_API_KEY=`.
 
 Edit the .env File:
 

@@ -8,6 +8,7 @@ from typing import Dict, Tuple, List, Any
 
 from dotenv import load_dotenv
 import gradio as gr
+import pytesseract
 
 # --- File and Cache Management ---
 def manage_log_files(log_dir: Path, max_logs: int):
@@ -30,6 +31,29 @@ def clear_cache(pdf_cache_dir: Path, ai_cache_dir: Path) -> str:
             results.append(f"ℹ️ {name} cache not found.")
         cache_dir.mkdir(exist_ok=True)
     return " ".join(results)
+
+def configure_tesseract():
+    """
+    Checks if Tesseract is in the system PATH and, if not, checks the
+    default Windows installation path and configures pytesseract accordingly.
+    Returns True if Tesseract is successfully configured, False otherwise.
+    """
+    # Check if Tesseract is already accessible via the system's PATH
+    if shutil.which("tesseract"):
+        print("Tesseract executable found in system PATH.")
+        return True
+
+    # If not in PATH, check the default Windows installation directory
+    windows_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(windows_path):
+        print(f"Tesseract not in PATH, but found at default location: {windows_path}")
+        # Explicitly tell the pytesseract library where to find the executable
+        pytesseract.pytesseract.tesseract_cmd = windows_path
+        return True
+
+    # If it's not found in either place, OCR cannot proceed.
+    print("Tesseract executable not found in PATH or default installation directory.")
+    return False
 
 # --- Configuration and API Keys ---
 def get_api_keys_from_env() -> Dict[str, str]:

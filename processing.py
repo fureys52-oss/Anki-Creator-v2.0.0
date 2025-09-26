@@ -12,7 +12,7 @@ import pytesseract
 from PIL import Image
 import markdown2
 
-from utils import get_api_keys_from_env, manage_log_files
+from utils import get_api_keys_from_env, manage_log_files, configure_tesseract
 from image_finder import ImageFinder, PDFImageSource, WikimediaSource, NLMOpenISource, OpenverseSource, FlickrSource
 from model_manager import GeminiModelManager
 
@@ -122,7 +122,10 @@ def build_html_from_tags(text: str, enabled_colors: List[str]) -> str:
 def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]:
     pdf_cache_dir.mkdir(exist_ok=True)
     ocr_log = []
-    tesseract_warning_issued = False
+    
+    # --- Run the Tesseract configuration ONCE at the start ---
+    tesseract_configured = configure_tesseract()
+    tesseract_warning_issued = False # This flag will prevent log spam
 
     def is_text_meaningful(text: str, min_chars: int = 30) -> bool:
         alphanumeric_chars = re.sub(r'[^a-zA-Z0-9]', '', text)
@@ -149,24 +152,28 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
 
                 if not is_text_meaningful(page_text):
                     page_ocr_logs.append(f"   > Page {page_num}: Low text quality. Attempting OCR fallback.")
-                    try:
-                        pix = page.get_pixmap(dpi=300)
-                        img_bytes = pix.tobytes("png")
-                        pil_image = Image.open(io.BytesIO(img_bytes))
-                        ocr_text = pytesseract.image_to_string(pil_image)
-                        if is_text_meaningful(ocr_text):
-                             page_text = ocr_text
-                             page_ocr_logs.append(f"     - OCR SUCCESS: Extracted {len(ocr_text)} characters.")
-                        else:
-                             page_ocr_logs.append(f"     - OCR FAILED: Tesseract found no meaningful text.")
-
-                    except Exception as ocr_error:
-                        if not tesseract_warning_issued:
-                            page_ocr_logs.append("  [CRITICAL OCR WARNING] Failed to run Tesseract OCR.")
-                            page_ocr_logs.append("  SOLUTION: Ensure Tesseract is installed and in your system PATH.")
-                            page_ocr_logs.append(f"  (Underlying Error: {ocr_error})")
-                            tesseract_warning_issued = True
-                        page_text = ""
+                    
+                    if tesseract_configured: # Only try if configuration was successful
+                        try:
+                            pix = page.get_pixmap(dpi=300)
+                            img_bytes = pix.tobytes("png")
+                            pil_image = Image.open(io.BytesIO(img_bytes))
+                            ocr_text = pytesseract.image_to_string(pil_image)
+                            if is_text_meaningful(ocr_text):
+                                page_text = ocr_text
+                                page_ocr_logs.append(f"     - OCR SUCCESS: Extracted {len(ocr_text)} characters.")
+                            else:
+                                page_ocr_logs.append(f"     - OCR FAILED: Tesseract found no meaningful text on this page.")
+                        except Exception as ocr_error:
+                            page_ocr_logs.append(f"  [OCR Error] Tesseract failed on this page. Error: {ocr_error}")
+                            page_text = ""
+                    
+                    # If configuration failed, issue a clear warning only once.
+                    elif not tesseract_warning_issued:
+                        page_ocr_logs.append("  [CRITICAL OCR WARNING] Tesseract is not found in the system PATH or default installation directory.")
+                        page_ocr_logs.append("  SOLUTION: Please reinstall Tesseract and ensure you check the 'Add to PATH' option,")
+                        page_ocr_logs.append("  or ensure it's installed in 'C:\\Program Files\\Tesseract-OCR\\'.")
+                        tesseract_warning_issued = True # Set flag to prevent re-printing
 
                 text_content += f"--- Page {page_num} ---\n{page_text}\n\n"
 
@@ -180,6 +187,7 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
 
     cache_file.write_text(text_content, encoding='utf-8')
     return text_content, ocr_log
+
 
 # --- Gemini API Call with Function Calling Support ---
 def call_gemini(prompt: str, api_key: str, model_name: str, tools: Optional[List[Dict]] = None) -> Any:

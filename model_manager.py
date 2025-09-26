@@ -24,11 +24,26 @@ class GeminiModelManager:
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={self.api_key}"
         try:
             response = requests.get(url, timeout=15)
-            response.raise_for_status()
+            response.raise_for_status() # This will raise an exception for non-200 codes
             data = response.json()
             return [model['name'].replace('models/', '') for model in data.get('models', [])]
+        except requests.exceptions.HTTPError as e:
+            # --- NEW, SMARTER ERROR HANDLING ---
+            print(f"[Model Manager] CRITICAL: The API call failed with status code {e.response.status_code}.")
+            if e.response.status_code == 403:
+                # This is the key error for a disabled API
+                print("   > REASON: This is a 'Permission Denied' error. It almost always means the")
+                print("   > 'Generative Language API' has not been enabled for your Google Cloud project.")
+                print("   > SOLUTION: Go to your Google Cloud Console, find your project, search for")
+                print("   > 'Generative Language API' in the API Library, and click the 'Enable' button.")
+            elif e.response.status_code == 400:
+                 print("   > REASON: This is a 'Bad Request' error. It usually means your API Key is invalid or expired.")
+                 print("   > SOLUTION: Go to Google AI Studio or your Google Cloud project and generate a new API key.")
+            else:
+                print(f"   > Full Error: {e.response.text}")
+            return []
         except requests.RequestException as e:
-            print(f"[Model Manager] CRITICAL: Could not fetch model list from Google API: {e}")
+            print(f"[Model Manager] CRITICAL: Could not connect to Google API: {e}")
             return []
 
     def get_optimal_models(self) -> Optional[Dict[str, Any]]:

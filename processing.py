@@ -12,7 +12,7 @@ import pytesseract
 from PIL import Image
 import markdown2
 
-from utils import get_api_keys_from_env, manage_log_files, configure_tesseract
+from utils import get_api_keys_from_env, manage_log_files, configure_tesseract, slugify, is_superfluous
 from image_finder import ImageFinder, PDFImageSource, WikimediaSource, NLMOpenISource, OpenverseSource, FlickrSource
 from model_manager import GeminiModelManager
 
@@ -31,10 +31,79 @@ NOTE_TYPE_CONFIG = {
     "basic": {
         "modelName": "Anki Deck Generator - Basic",
         "fields": ["Front", "Back", "Image", "Source"],
-        "css": """.card { font-family: Arial; font-size: 20px; text-align: center; } 
-                 img { max-height: 500px; } 
-                 ul { display: inline-block; text-align: left; }""",
-        "templates": [{"Name": "Card 1", "Front": "{{Front}}", "Back": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}\n\n<br><br>{{#Image}}{{Image}}{{/Image}}\n<div style='font-size:12px; color:grey;'>{{Source}}</div>"}],
+       "css": """.card { 
+            font-family: Arial, sans-serif; 
+            font-size: 20px; 
+            text-align: center; 
+         }
+         .content-body {
+            margin: 0 auto;
+            max-width: 90%;
+            text-align: left;
+         }
+         img { max-height: 500px; margin-top: 15px; }
+
+         /* --- HIERARCHICAL LIST STYLING --- */
+
+         ul {
+            list-style-type: none;
+            padding-left: 0;
+            margin: 0;
+         }
+         
+         li {
+            position: relative;
+            padding-left: 1.5em; /* Space for our custom bullet */
+            margin-bottom: 0.75em; /* Spacing between points */
+         }
+
+         li::before {
+            content: '•'; /* The default bullet character */
+            position: absolute;
+            left: 0;
+            top: 0;
+            color: #555;
+         }
+
+         /* --- THE DEFINITIVE FIX FOR HEADERS --- */
+         /* Target any <strong> tag that is the FIRST child of an <li> */
+         li > strong:first-child {
+            display: block;      /* Make the header its own line */
+            margin-left: -1.5em; /* Reclaim the padding space to align with parent */
+            margin-bottom: 0.5em;/* Add space after the header */
+         }
+         /* Now, specifically HIDE the bullet for those list items */
+         li:has(> strong:first-child)::before {
+            content: '';
+         }
+         /* -------------------------------------- */
+
+         /* Style for nested sub-lists */
+         ul ul {
+            margin-top: 0.75em;
+            padding-left: 1.5em; /* Indent the entire sub-list */
+         }
+         ul ul li::before {
+            content: '○'; /* Use an open circle for sub-bullets */
+            color: #888;
+         }
+         """,
+        
+        "templates": [
+            {
+                "Name": "Card 1", 
+                "Front": "{{Front}}", 
+                "Back": """{{FrontSide}}
+                       <hr id=answer>
+                       <div class="content-body">
+                         {{Back}}
+                       </div>
+                       <br><br>
+                       {{#Image}}{{Image}}{{/Image}}
+                       <div style='font-size:12px; color:grey;'>{{Source}}</div>"""
+            }
+        ],
+    
         "function_tool": {
             "name": "create_anki_card",
             "description": "Creates a single Anki card based on a conceptual chunk of facts.",
@@ -99,9 +168,6 @@ def sanitize_text(text: str) -> str:
     return text
 
 def build_html_from_tags(text: str, enabled_colors: List[str]) -> str:
-    """Converts custom tags and markdown into Anki-compatible HTML."""
-    clean_text = sanitize_text(text)
-    
     tag_map = {
         "<pos>": ("positive_key_term", f"<font color='{HTML_COLOR_MAP['positive_key_term']}'><b>"), "</pos>": ("positive_key_term", "</b></font>"),
         "<neg>": ("negative_key_term", f"<font color='{HTML_COLOR_MAP['negative_key_term']}'><b>"), "</neg>": ("negative_key_term", "</b></font>"),
@@ -109,14 +175,12 @@ def build_html_from_tags(text: str, enabled_colors: List[str]) -> str:
         "<tip>": ("mnemonic_tip", f"<font color='{HTML_COLOR_MAP['mnemonic_tip']}'>"), "</tip>": ("mnemonic_tip", "</font>"),
     }
     for tag, (key, replacement) in tag_map.items():
-        clean_text = clean_text.replace(tag, replacement if key in enabled_colors else "")
+        text = text.replace(tag, replacement if key in enabled_colors else "")
 
-    # Let markdown2 handle list creation and line breaks.
-    html = markdown2.markdown(clean_text, extras=["cuddled-lists", "break-on-newline"])
+    # The clever regex is no longer needed. We trust the AI and the markdown library.
+    html = markdown2.markdown(text, extras=["cuddled-lists", "break-on-newline"])
     
-    # Remove any lingering paragraph tags that cause extra space.
-    html = html.replace("<p>", "").replace("</p>", "").strip()
-    return html
+    return html.strip()
 
 # --- PDF Processing ---
 def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]:
@@ -190,40 +254,65 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
 
 
 # --- Gemini API Call with Function Calling Support ---
-def call_gemini(prompt: str, api_key: str, model_name: str, tools: Optional[List[Dict]] = None) -> Any:
+def call_gemini(prompt: str, api_key: str, model_name: str, tools: Optional[List[Dict]] = None, task_id: str = "generic") -> Any:
+    """
+    Calls the Gemini API, now with the correct URL, a unique task_id,
+    and all robust error handling and response parsing logic.
+    """
+    # The corrected URL
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    
     headers = {'Content-Type': 'application/json'}
 
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    # Include a comment in the prompt to make it unique
+    full_prompt = f"<!-- Task ID: {task_id} | Timestamp: {time.time()} -->\n{prompt}"
+    
+    payload = {"contents": [{"parts": [{"text": full_prompt}]}]}
     if tools:
         payload["tools"] = tools
         payload["tool_config"] = {"function_calling_config": {"mode": "ANY"}}
 
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=300)
-        if response.status_code == 429: return "API_LIMIT_REACHED"
+        
+        # Check for specific non-200 status codes first
+        if response.status_code == 429: 
+            return "API_LIMIT_REACHED"
+        
+        # Raise an exception for other bad status codes (like 400, 404, 500)
         response.raise_for_status()
 
         response_data = response.json()
+        
+        # Check for safety blocks from the promptFeedback field
         if response_data.get('promptFeedback', {}).get('blockReason'):
             return f"API_SAFETY_BLOCK: {response_data['promptFeedback']['blockReason']}"
 
-        candidate = response_data.get('candidates', [{}])[0]
+        # Check for an empty or missing 'candidates' list
+        if not response_data.get('candidates'):
+            return f"Warning: Gemini returned a response with no candidates. Full Response: {response.text}"
+
+        candidate = response_data['candidates'][0]
         content = candidate.get('content', {})
         parts = content.get('parts', [{}])
 
+        # Check for and return function calls if they exist
         function_calls = [part['functionCall'] for part in parts if 'functionCall' in part]
         if function_calls:
             return function_calls
 
+        # Check for and return standard text if it exists
         if 'text' in parts[0]:
             return parts[0]['text']
 
-        return f"Warning: Gemini returned an empty or unexpected response.\n{response.text}"
+        # Fallback for any other unexpected but successful response
+        return f"Warning: Gemini returned an empty or unexpected response part. Full Response: {response.text}"
 
     except requests.exceptions.RequestException as e:
         return f"Error calling Gemini API: {e}"
-    return "Error: Empty response from Gemini."
+        
+    # Final fallback in case of a very unusual error
+    return "Error: An unknown error occurred in the Gemini API call."
 
 # --- AnkiConnect ---
 def invoke_ankiconnect(action: str, **params: Any) -> Tuple[Any | None, str | None]:
@@ -277,19 +366,20 @@ def add_note_to_anki(deck_name: str, note_type_key: str, fields_data: Dict[str, 
 
 # --- Main Deck Processor Class ---
 class DeckProcessor:
-    def __init__(self, deck_name, files, api_keys, logger, progress, card_type, image_sources_config, enabled_colors, custom_tags, prompts_dict, cache_dirs, clip_model, curator_options):
+    def __init__(self, deck_name, files, api_keys, logger, progress, card_type, image_sources_config, enabled_colors, custom_tags, prompts_dict, cache_dirs, clip_model, content_options):
         self.deck_name = deck_name
         self.files = files
         self.api_keys = api_keys
         self.logger_func = logger
         self.progress = progress
         self.card_type = card_type
+        self.image_sources_config = image_sources_config
         self.enabled_colors = enabled_colors
         self.custom_tags = custom_tags
         self.prompts_dict = prompts_dict
         self.pdf_cache_dir, self.ai_cache_dir = cache_dirs
         self.clip_model = clip_model['model'] if clip_model else None
-        self.curator_options = curator_options
+        self.content_options = content_options
         self.note_type_key = "cloze" if "Cloze" in self.card_type else "basic"
         self.full_text = ""
         self.pdf_paths = [file.name for file in self.files]
@@ -297,56 +387,131 @@ class DeckProcessor:
         self.pro_model = None
         self.flash_model = None
         self.rpm_limit_flash = None
-        self.pdf_images_cache = [] 
-        if self.clip_model:
-            strategies = [PDFImageSource(), WikimediaSource(), NLMOpenISource(), OpenverseSource(api_key=self.api_keys.get("OPENVERSE_API_KEY"), api_key_name="OPENVERSE_API_KEY"), FlickrSource(api_key=self.api_keys.get("FLICKR_API_KEY"), api_key_name="FLICKR_API_KEY")]
-            self.image_finder = ImageFinder([s for s in strategies if s.name in image_sources_config])
-        else:
-            self.logger_func("WARNING: CLIP Model not loaded. Image searching will be disabled.")
-            self.image_finder = None
+        self.pdf_images_cache = []
+        self.image_finder = None
+        self.curated_image_pages = [] # Initialize correctly
 
     def log(self, message): self.logger_func(message)
+
+    def _initialize_image_finder(self):
+        if self.clip_model:
+            strategies = [PDFImageSource(), WikimediaSource(), NLMOpenISource(), OpenverseSource(api_key=self.api_keys.get("OPENVERSE_API_KEY"), api_key_name="OPENVERSE_API_KEY"), FlickrSource(api_key=self.api_keys.get("FLICKR_API_KEY"), api_key_name="FLICKR_API_KEY")]
+            enabled_strategies = [s for s in strategies if s.name in self.image_sources_config and s.is_enabled]
+            self.image_finder = ImageFinder(enabled_strategies)
+        else:
+            self.log("WARNING: CLIP Model not loaded. Image searching will be disabled.")
 
     def run(self):
         try:
             manager = GeminiModelManager(self.api_keys["GEMINI_API_KEY"])
             optimal_models = manager.get_optimal_models()
-            if not optimal_models:
-                self.log("CRITICAL ERROR: Could not determine optimal Gemini models. Stopping deck generation.")
-                return
+            if not optimal_models: return
             self.pro_model = optimal_models['pro_model_name']
             self.flash_model = optimal_models['flash_model_name']
             self.rpm_limit_flash = optimal_models['flash_model_rpm']
 
             if not self._setup_anki(): return
             if not self._process_pdfs(): return
-            if self.image_finder:
-                self.log("\n--- Pre-caching images from PDF(s) ---")
-                pdf_image_extractor = PDFImageSource()
-                for pdf_path in self.pdf_paths:
-                    extracted = pdf_image_extractor._extract_images_and_context(pdf_path)
-                    if extracted:
-                        self.pdf_images_cache.extend(extracted)
-                self.log(f"Found and cached {len(self.pdf_images_cache)} images from source PDF(s).")
             
-            structured_facts = self._extract_facts()
-            if not structured_facts:
-                self.log(f"\n--- SKIPPING DECK: '{self.deck_name}' ---")
-                self.log("   > Reason: The AI could not extract any meaningful facts from the source PDF(s).")
-                return
-            final_cards_data = self._generate_cards(structured_facts)
+            curated_text = self._curate_text_pages()
+            self.curated_image_pages = self._curate_image_pages()
+            
+            self._initialize_image_finder()
+            if self.image_finder:
+                self.log("\n--- Pre-caching images from AI-curated pages ---")
+                pdf_image_extractor = PDFImageSource()
+                extracted = pdf_image_extractor._extract_images_and_context(self.pdf_paths[0], pages_to_process=self.curated_image_pages)
+                self.pdf_images_cache.extend(extracted)
+                self.log(f"Found and cached {len(self.pdf_images_cache)} images from {len(self.curated_image_pages)} curated pages.")
+
+            structured_facts = self._extract_facts(curated_text)
+            if not structured_facts: return
+
+            filtered_facts = [fact for fact in structured_facts if not is_superfluous(fact['fact'])]
+            self.log(f"\n--- Pre-filtering complete. {len(filtered_facts)} high-quality facts remain. ---")
+            if not filtered_facts: return
+
+            final_cards_data = self._generate_cards(filtered_facts)
             if final_cards_data is None: return
             final_cards = self._parse_and_deduplicate(final_cards_data)
             if final_cards is None: return
             self._add_notes_to_anki(final_cards)
+
         except Exception as e:
             self.log(f"\n--- A CRITICAL ERROR OCCURRED IN DECK '{self.deck_name}' ---\n{e}\nTraceback: {traceback.format_exc()}")
+    # --- REPLACES the old _curate_content ---
+    def _curate_text_pages(self) -> str:
+        self.log("\n--- AI Pass 0: Curating text pages ---")
+        case_instruction = "You MUST classify pages containing case studies as 'Core'." if "Include Case Studies" in self.content_options else "You MUST classify pages containing introductory case studies as 'Superfluous'."
+        table_instruction = "You MUST classify pages containing summary tables or charts as 'Core'." if "Include Summary Tables" in self.content_options else "You MUST classify pages containing large, dense tables of data as 'Superfluous'."
+        prompt = self.prompts_dict['curator'].format(case_study_instruction=case_instruction, table_instruction=table_instruction)
+        response = call_gemini(prompt + "\n\n--- TEXT ---\n" + self.full_text, self.api_keys["GEMINI_API_KEY"], model_name=self.flash_model, task_id="curate_text")
+        
+        if "API_" in str(response) or not response:
+            self.log("   > WARNING: AI text curation failed. Proceeding with all pages.")
+            return self.full_text
+        try:
+            page_numbers_str = re.findall(r'\d+', response)
+            if not page_numbers_str: raise ValueError("No numbers found in AI response.")
+            pages_to_keep = {int(p) for p in page_numbers_str}
+            page_pattern = re.compile(r'(--- Page (\d+) ---\n.*?(?=(--- Page \d+ ---)|\Z))', re.DOTALL)
+            curated_text = "".join(match.group(1) for match in page_pattern.finditer(self.full_text) if int(match.group(2)) in pages_to_keep)
+            
+            if curated_text:
+                self.log(f"   > Text Curation successful. Keeping {len(pages_to_keep)} pages for fact extraction.")
+                return curated_text
+            else:
+                self.log("   > WARNING: AI text curation resulted in no pages. Using all pages.")
+                return self.full_text
+        except (ValueError, TypeError) as e:
+            self.log(f"   > WARNING: Could not parse curator response. Using all pages. (Error: {e})")
+            return self.full_text
+
+    # --- NEW METHOD for Image Curation ---
+    def _curate_image_pages(self) -> List[int]:
+        self.log("\n--- AI Pass 0.5: Curating visually significant pages for image search ---")
+        
+        # --- NEW: Ground the AI by finding the total number of pages first ---
+        all_page_nums = [int(p) for p in re.findall(r'--- Page (\d+) ---', self.full_text)]
+        if not all_page_nums:
+            self.log("   > WARNING: Could not determine page count. Image curation will be less reliable.")
+            return [] # Cannot proceed without a page count
+        total_pages = max(all_page_nums)
+
+        # Format the prompt with the total page count
+        prompt = self.prompts_dict['image_curator'].format(total_pages=total_pages)
+        response = call_gemini(prompt + "\n\n--- TEXT ---\n" + self.full_text, self.api_keys["GEMINI_API_KEY"], model_name=self.flash_model, task_id="curate_images")
+
+        if "API_" in str(response) or not response:
+            self.log("   > WARNING: AI image curation failed. Image search will consider all pages.")
+            return all_page_nums # Fallback to all pages
+        try:
+            # Step 1: Extract all numbers from the (potentially messy) response
+            page_numbers_str = re.findall(r'\d+', response)
+            if not page_numbers_str: raise ValueError("No numbers found.")
+
+            # --- NEW: The Sanity Check ---
+            # Step 2: Filter the list to only include valid page numbers
+            pages_to_keep = [p for p in {int(p) for p in page_numbers_str} if 1 <= p <= total_pages]
+            
+            invalid_pages_found = len(page_numbers_str) - len(pages_to_keep)
+            if invalid_pages_found > 0:
+                self.log(f"   > Image Curator sanity check: Discarded {invalid_pages_found} invalid page numbers.")
+
+            self.log(f"   > Image Curation successful. Prioritizing {len(pages_to_keep)} pages for image search.")
+            return sorted(pages_to_keep)
+            
+        except (ValueError, TypeError):
+            self.log("   > WARNING: Could not parse image curator response. Image search will consider all pages.")
+            return all_page_nums
 
     def _setup_anki(self):
         self.log(f"Card Type Selected: {self.card_type}")
         if self.custom_tags: self.log(f"Custom Tags: {', '.join(self.custom_tags)}")
         error = setup_anki_deck_and_note_type(self.deck_name, self.note_type_key)
-        if error: self.log(f"DECK SETUP ERROR: {error}"); return False
+        if error:
+            self.log(f"DECK SETUP ERROR: {error}")
+            return False
         self.log(f"Anki setup for deck '{self.deck_name}' is correct.")
         return True
 
@@ -364,70 +529,19 @@ class DeckProcessor:
         self.log("All PDF files processed and cached.")
         return True
 
-    def _curate_pages(self) -> Optional[List[int]]:
-        """Calls the curator AI and robustly parses the page numbers from its response."""
-        self.log("\n--- AI Pass 0: Curating relevant pages ---")
-        
-        retain_cases, retain_tables = self.curator_options['retain_case_studies'], self.curator_options['retain_tables']
-        case_study_instruction = "You MUST classify pages that are primarily case studies or clinical vignettes as 'Core Content'." if retain_cases else "You MUST classify pages that are primarily case studies or clinical vignettes as 'Superfluous'."
-        table_instruction = "You MUST classify pages that consist mainly of large tables, charts, or diagrams as 'Core Content'." if retain_tables else "You MUST classify pages that consist mainly of large tables, charts, or diagrams as 'Superfluous'."
-
-        prompt = self.prompts_dict['curator'].format(
-            case_study_instruction=case_study_instruction,
-            table_instruction=table_instruction
-        )
-        full_prompt = prompt + "\n\n--- DOCUMENT TEXT ---\n" + self.full_text
-
-        response = call_gemini(full_prompt, self.api_keys["GEMINI_API_KEY"], model_name=self.flash_model)
-
-        if not isinstance(response, str) or "API_" in response:
-            self.log(f"   > WARNING: Curator AI call failed. Proceeding with all pages. Reason: {response}")
-            return None
-
-        try:
-            found_pages = set()
-            matches = re.findall(r'(\d+)(?:-(\d+))?', response)
-            if not matches:
-                self.log("   > WARNING: Curator returned a response, but no page numbers could be extracted. Proceeding with all pages.")
-                return None
-
-            for start, end in matches:
-                start_num = int(start)
-                if end:
-                    end_num = int(end)
-                    found_pages.update(range(start_num, end_num + 1))
-                else:
-                    found_pages.add(start_num)
-            
-            if not found_pages: return None
-            
-            sorted_pages = sorted(list(found_pages))
-            self.log(f"   > Curator identified {len(sorted_pages)} core pages to process.")
-            return sorted_pages
-        except Exception as e:
-            self.log(f"   > WARNING: An error occurred while parsing the curator's response. Proceeding with all pages. Error: {e}")
-            return None
-
-    def _extract_facts(self) -> Optional[List[Dict[str, Any]]]:
-        self.log("\n--- Cleaning and Structuring Text ---")
-        cleaned_text = sanitize_text(self.full_text)
-        
-        curated_pages_list = self._curate_pages()
-
-        self.log(f"\n--- AI Pass 1: Extracting atomic facts in parallel (Batch Size: {BATCH_SIZE}) ---")
+    def _extract_facts(self, text_to_process: str) -> Optional[List[Dict[str, Any]]]:
+        self.log("\n--- AI Pass 1: Extracting atomic facts from curated text... ---")
         extractor_model = self.flash_model
 
+        # --- THIS IS THE KEY FIX ---
+        # It now uses the 'text_to_process' variable passed to it, not the old self.full_text
         page_pattern = re.compile(r'--- Page (\d+) ---\n(.*?)(?=--- Page \d+ ---|\Z)', re.DOTALL)
-        all_pages = [(int(num), content) for num, content in page_pattern.findall(cleaned_text) if len(content.strip()) > 50]
-
-        if curated_pages_list:
-            original_count = len(all_pages)
-            all_pages = [p for p in all_pages if p[0] in curated_pages_list]
-            self.log(f"   > Content filtered based on curator results. Using {len(all_pages)} of {original_count} original pages.")
+        all_pages = [(int(num), content) for num, content in page_pattern.findall(text_to_process) if len(content.strip()) > 50]
 
         if not all_pages:
-            self.log("ERROR: No pages with sufficient text content found after cleaning and curation."); return None
+            self.log("ERROR: No pages with sufficient text content found after curation and cleaning."); return None
         
+        # The rest of the batching and parallel processing logic is correct and does not need changes.
         batched_tasks = []
         for i in range(0, len(all_pages), BATCH_SIZE):
             batch = all_pages[i:i + BATCH_SIZE]
@@ -454,7 +568,7 @@ class DeckProcessor:
                         wait_time = request_timestamps[0] - (current_time - 60) + 0.1
                         time.sleep(wait_time)
                 prompt = self.prompts_dict['extractor'] + "\n\n--- TEXT ---\n" + batch_content
-                response = call_gemini(prompt, self.api_keys["GEMINI_API_KEY"], model_name=extractor_model)
+                response = call_gemini(prompt, self.api_keys["GEMINI_API_KEY"], model_name=extractor_model, task_id=f"extract_batch_{page_range_str}")
                 was_successful = False
                 if isinstance(response, str):
                     match = re.search(r'\[.*\]', response, re.DOTALL)
@@ -463,9 +577,6 @@ class DeckProcessor:
                         try:
                             facts_in_batch = json.loads(json_string)
                             if isinstance(facts_in_batch, list):
-                                for fact in facts_in_batch:
-                                    if isinstance(fact, dict) and 'fact' in fact:
-                                        fact['fact'] = sanitize_text(fact['fact'])
                                 with lock:
                                     all_extracted_facts.extend(facts_in_batch)
                                 was_successful = True
@@ -473,18 +584,14 @@ class DeckProcessor:
                             self.log(f"\nWARNING (Batch {page_range_str}): AI returned a string that looked like JSON but failed to parse.")
                 if not was_successful:
                     self.log(f"\nWARNING (Batch {page_range_str}): AI call failed or returned a response without valid JSON. Reason: {response}")
-
             list(self.progress.tqdm(executor.map(extract_facts_from_batch, batched_tasks), total=len(batched_tasks), desc="Extracting Facts in Batches"))
-
         if not all_extracted_facts:
             self.log("ERROR: AI Pass 1 failed to extract any facts from any batch."); return None
-        
         validated_facts = []
         for i, item in enumerate(all_extracted_facts):
             if isinstance(item, dict) and 'fact' in item and 'page_number' in item:
                 try: validated_facts.append({"fact": str(item['fact']), "page_number": int(item['page_number'])})
                 except (ValueError, TypeError): self.log(f"WARNING: Discarding malformed fact object at index {i}: {item}")
-        
         self.log(f"Pass 1 complete. Found and validated {len(validated_facts)} facts across all batches.")
         return validated_facts
 
@@ -526,7 +633,7 @@ class DeckProcessor:
         if not prompt or not tools:
             self.log(f"ERROR: Could not determine prompt for card type '{self.card_type}'"); return None
 
-        card_generation_result = call_gemini(prompt, self.api_keys["GEMINI_API_KEY"], model_name=self.pro_model, tools=tools)
+        card_generation_result = call_gemini(prompt, self.api_keys["GEMINI_API_KEY"], model_name=self.pro_model, tools=tools, task_id="generate_cards")
 
         if isinstance(card_generation_result, str) and "API_" in card_generation_result:
             self.log(f"\nERROR: AI card generation failed. Reason: {card_generation_result}"); return None
@@ -588,37 +695,39 @@ class DeckProcessor:
     def _add_notes_to_anki(self, final_cards: List[Dict]):
         self.log(f"\n--- Adding Cards to Deck: '{self.deck_name}' ---")
         cards_added, cards_skipped, cards_failed = 0, 0, 0
-        
         for card_data in self.progress.tqdm(final_cards, desc="Adding Cards to Anki"):
             try:
                 image_html = None
-                
                 full_source_page_numbers = card_data.get("page_numbers", [])
 
                 if self.image_finder and card_data.get("image_search_query"):
-                    queries = [
-                        card_data.get("image_search_query"),
-                        card_data.get("simple_search_query")
-                    ]
-                    search_queries = [q for q in queries if q]
+                    search_queries = [q for q in [card_data.get("image_search_query"), card_data.get("simple_search_query")] if q]
 
-                    if len(full_source_page_numbers) > 3:
-                        focused_search_pages = full_source_page_numbers[:3]
-                    else:
-                        focused_search_pages = full_source_page_numbers
+                    # --- NEW, ROBUST PAGE LIST GENERATION ---
+                    # 1. Create the focused list (intersection of card pages and curated pages).
+                    focused_pages = [p for p in full_source_page_numbers if p in self.curated_image_pages]
+                    if len(focused_pages) > 3:
+                        focused_pages = focused_pages[:3]
 
+                    # 2. Create the expanded list (card pages +/- 1, THEN filtered by the curator).
+                    min_page = min(full_source_page_numbers) if full_source_page_numbers else 0
+                    max_page = max(full_source_page_numbers) if full_source_page_numbers else 0
+                    expanded_range = list(range(max(1, min_page - 1), max_page + 2))
+                    expanded_pages = [p for p in expanded_range if p in self.curated_image_pages]
+                    
+                    # This is now the single, clean call to the ImageFinder.
                     image_html = self.image_finder.find_best_image(
                         query_texts=search_queries,
                         clip_model=self.clip_model,
                         pdf_path=self.pdf_paths[0],
                         pdf_images_cache=self.pdf_images_cache,
-                        focused_search_pages=focused_search_pages,
-                        full_source_pages=full_source_page_numbers
+                        focused_search_pages=focused_pages,
+                        expanded_search_pages=expanded_pages # Pass the new expanded list
                     )
 
-                page_str = f"Pgs {', '.join(map(str, full_source_page_numbers))}"
+                page_str = f"Pgs {', '.join(map(str, sorted(list(set(full_source_page_numbers)))))}"
                 source_text = f"{Path(self.pdf_paths[0]).stem} - {page_str}"
-
+                
                 fields, final_note_type_key = {}, None
 
                 if card_data['type'] == 'basic':
@@ -657,9 +766,9 @@ class DeckProcessor:
                 self.log(f"ERROR processing card data: '{str(card_data)[:500]}...' | Exception: {e}")
 
         self.log(f"\n--- Final Tally ---\nCards Added: {cards_added}\nCards Skipped/Failed: {cards_skipped + cards_failed}")
-
 # --- Main Generator Function ---
 def generate_all_decks(max_decks: int, *args):
+    # This robustly unpacks all arguments passed from the UI
     master_files, generate_button, log_output, clip_model, *remaining_args = args
     
     log_history = ""
@@ -685,17 +794,19 @@ def generate_all_decks(max_decks: int, *args):
         
         card_type, image_sources, enabled_colors, custom_tags_str, curator_retain_cases, curator_retain_tables, *prompts = settings_and_prompts
         
+        content_options = []
+        if curator_retain_cases: content_options.append("Include Case Studies")
+        if curator_retain_tables: content_options.append("Include Summary Tables")
+        
+        # --- THIS IS THE CORRECTED DICTIONARY ---
+        # The order of keys now correctly maps to the order of the 'prompts' list
         prompts_dict = {
-            'curator': prompts[0], 
-            'extractor': prompts[1], 
-            'builder': prompts[2], 
-            'cloze_builder': prompts[3], 
-            'conceptual_cloze_builder': prompts[4]
-        }
-
-        curator_options = {
-            'retain_case_studies': curator_retain_cases,
-            'retain_tables': curator_retain_tables
+            'curator': prompts[0],
+            'image_curator': prompts[1],
+            'extractor': prompts[2],
+            'builder': prompts[3],
+            'cloze_builder': prompts[4],
+            'conceptual_cloze_builder': prompts[5]
         }
         
         custom_tags = [tag.strip() for tag in custom_tags_str.split(',') if tag.strip()]
@@ -722,7 +833,7 @@ def generate_all_decks(max_decks: int, *args):
                 image_sources_config=image_sources, enabled_colors=enabled_colors, 
                 custom_tags=custom_tags, prompts_dict=prompts_dict, 
                 cache_dirs=cache_dirs, clip_model=clip_model,
-                curator_options=curator_options
+                content_options=content_options
             )
             processor.run()
             yield log_history, gr.update(), gr.update()
@@ -739,4 +850,3 @@ def generate_all_decks(max_decks: int, *args):
             logger(f"Session log saved to: {log_file_path}")
         final_ui_state[0] = log_history
         yield tuple(final_ui_state)
-

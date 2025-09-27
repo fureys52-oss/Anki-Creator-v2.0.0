@@ -7,7 +7,11 @@ RULES:
 1.  You must identify the page numbers of all pages that contain core lecture material.
 2.  {case_study_instruction}
 3.  {table_instruction}
-4.  You MUST classify pages containing learning objectives, title pages, suggested readings, references, or acknowledgements as 'Superfluous'.
+4.  You MUST classify the following page types as 'Superfluous':
+    - Title pages
+    - Learning Objectives
+    - Suggested Readings / References / Acknowledgements
+    - Lecture outlines or Tables of Contents (pages that primarily consist of a list of topics covered in the lecture).
 5.  Your final output must be a single, clean, comma-separated list of the integer page numbers to KEEP. Do not include any other text or explanation.
 
 EXAMPLE:
@@ -16,8 +20,9 @@ EXAMPLE:
 Endemic Mycoses
 Kathryn Leyva, Ph.D.
 --- Page 2 ---
-Learning Objectives
-- Define dimorphism
+PART I: HYPERSENSITIVITY
+- Immediate (Type I) Hypersensitivity
+- Antibody-Mediated (Type II) Hypersensitivity
 --- Page 3 ---
 Histoplasmosis is a fungal infection...
 --- Page 4 ---
@@ -29,19 +34,19 @@ References
 """
 
 EXTRACTOR_PROMPT = """
-You are an expert data extraction engine. Your sole function is to process the provided text, which contains content from multiple pages, and return a valid JSON array of objects.
+You are an expert data extraction engine performing a critical task. Your sole function is to process the provided text and return a valid JSON array of objects.
 
 CRITICAL OUTPUT RULES:
 1.  **JSON Array Output:** You MUST return a single, valid JSON array `[]`. Do not output any text, notes, or explanations outside of this array.
-2.  **Object Structure:** Each object in the array must have two keys:
-    - `"fact"`: A string containing the single, atomic piece of information extracted.
-    - `"page_number"`: The integer page number from which the fact was extracted.
-3.  **Comprehensive Extraction:** You must be exhaustive and extract all available facts from all pages provided in the text. Ignore headers, footers, and page markers in the final fact text.
+2.  **Object Structure:** Each object in the array must have two keys: "fact" and "page_number".
+3.  **Strict Syntax:** You MUST ensure all keys and all string values are enclosed in double quotes ("). You MUST NOT include a trailing comma after the final object in the array.
+4.  **Self-Correction:** Before returning your response, you MUST validate your own output to ensure it is perfectly formed, valid JSON.
+5.  **Comprehensive Extraction:** Extract all available facts from all pages provided in the text.
 
 EXAMPLE:
 --- INPUT TEXT ---
 --- Page 9 ---
-The heart has four chambers. Coccidioides is endemic to the Southwestern US.
+The heart has four chambers.
 --- Page 10 ---
 The Krebs cycle produces ATP.
 
@@ -49,10 +54,6 @@ The Krebs cycle produces ATP.
 [
   {
     "fact": "The heart has four chambers.",
-    "page_number": 9
-  },
-  {
-    "fact": "Coccidioides is endemic to the Southwestern US.",
     "page_number": 9
   },
   {
@@ -71,15 +72,22 @@ Core Rules & Parameters:
 
 1.  **Comprehensive Coverage and Grouping:** Your primary goal is to ensure that every atomic fact from the input is used to inform the creation of at least one card. You must logically group facts based on shared themes, mechanisms, or clinical concepts. It is permissible to use a single crucial fact in more than one card if it is central to understanding multiple distinct concepts.
 
-2.  **Context-Aware Chunking by Content Size:** Your absolute limits for the "Back" of a card are 200-1000 characters. Within this range, you must dynamically select a target size based on the conceptual complexity of the grouped facts. Use about 200-400 characters for simpler concepts, use about 400-800 characters for the ideal chunking amount, and use 800-1000 characters for concepts that are extensive and need to be thoroughly connected.
-You should strive to use the 400-800 character range most of the time. Save the 200-400 and 800-1000 character lengths for situations and cards where you find it logically appropriate to use those ranges.
+2.  **Context-Aware Chunking by Content Size:** Your absolute limits for the "Back" of a card are 200-1000 characters. Within this range, you must dynamically select a target size based on the conceptual complexity of the grouped facts. Use about 200-400 characters for simpler concepts, use about 300-500 characters for the ideal chunking amount, and use 550-800 characters for concepts that are extensive and need to be thoroughly connected.
+You should strive to use the 300-500 character range most of the time. Save the 100-250 and 550-800 character lengths for situations and cards where you find it logically appropriate to use those ranges.
 
 3.  **Question Generation (Front):** The "Front" must be a specific, 2nd or 3rd-order question that exhaustively prompts for the information on the "Back". Use varied question styles: "Explain the mechanism...", "Compare and contrast...", "A patient presents with...", or "Why is...".
 
 4.  **Answer Generation (Back):**
-    - The "Back" must be formatted using hyphenated bullet points (-).
-    - **CRITICAL:** Use a single newline character (`\n`) to separate distinct bullet points or conceptual sections. Do NOT use `\\n` or multiple newlines.
-    - You must use the following custom tags to enclose specific information: `<pos>`, `<neg>`, `<ex>`, `<tip>`.
+    A.  **Headers:** Lines that introduce a topic and end with a colon (e.g., "Systemic Sclerosis:") should be bolded using Markdown (`**Header:**`) and should **NOT** start with a hyphen. You should add a blank line before a new header for visual separation.
+
+    B.  **Lists:** All list items, including nested items, MUST begin with a hyphen (`- `). Do not use simple indentation for lists.
+
+    C. You must also use the following custom tags to enclose specific information:
+
+<pos>: For key terms, definitions, or core positive concepts.
+<neg>: For consequences, side effects, contraindications, or negative outcomes.
+<ex>: For specific examples, including explicit names of medications, diseases, pathologies.
+<tip>: For tips, mnemonics, or high-yield clinical pearls.
 
 5.  **Metadata (Page Numbers & Image Query):**
     - The "Page_numbers" field must be a JSON array of unique integers from the source facts (e.g., [45, 46, 48]).
@@ -158,4 +166,29 @@ Based on all the rules and the example above, process the following atomic facts
 
 ATOMIC FACTS WITH PAGE NUMBERS:
 {atomic_facts_with_pages}
+"""
+
+IMAGE_CURATOR_PROMPT = """
+You are an expert visual designer and curriculum analyst. Your sole task is to scan the full text of a lecture document and identify ONLY the page numbers that contain visually significant, high-quality images.
+
+RULES:
+1.  The document has a total of {total_pages} pages. Your response must ONLY contain page numbers within the range of 1 to {total_pages}.
+2.  You must identify page numbers for pages containing:
+    - Diagrams, charts, or flowcharts.
+    - High-quality photographs or micrographs.
+    - Summary tables that are visually distinct and well-structured.
+3.  You MUST classify pages that consist ONLY of text (e.g., bullet points, paragraphs, learning objectives, title pages) as NOT visually significant.
+4.  Your final output must be a single, clean, comma-separated list of the integer page numbers that contain the best images. Do not describe the images, the pages, or your reasoning. Your only output is the list of numbers.
+
+EXAMPLE:
+--- INPUT TEXT (from a 67-page document) ---
+--- Page 3 ---
+(This page contains a detailed diagram of the Krebs cycle)
+--- Page 4 ---
+The Krebs cycle is a series of chemical reactions... (a full page of text).
+--- Page 5 ---
+(This page contains a micrograph of a cell)
+
+--- CORRECT OUTPUT ---
+3, 5
 """

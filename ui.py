@@ -1,10 +1,8 @@
-﻿# ui.py
-
-from pathlib import Path
+﻿from pathlib import Path
 from typing import List, Any, Tuple
 import functools
 import gradio as gr
-from prompts import EXTRACTOR_PROMPT, BUILDER_PROMPT, CLOZE_BUILDER_PROMPT, CONCEPTUAL_CLOZE_BUILDER_PROMPT, CURATOR_PROMPT
+from prompts import EXTRACTOR_PROMPT, BUILDER_PROMPT, CLOZE_BUILDER_PROMPT, CONCEPTUAL_CLOZE_BUILDER_PROMPT, CURATOR_PROMPT, IMAGE_CURATOR_PROMPT
 from utils import clear_cache, update_decks_from_files
 from processing import generate_all_decks
 
@@ -19,7 +17,6 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
     ]
     
     with gr.Blocks(theme=gr.themes.Soft(primary_hue="blue"), title="Anki Deck Generator") as app:
-        # Store the pre-loaded model in a non-interactive state component
         clip_model_state = gr.State(clip_model)
         
         gr.Markdown(f"# Anki Flashcard Generator\n*(v{version})*")
@@ -54,6 +51,9 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
                             with gr.Row():
                                 curator_retain_case_studies = gr.Checkbox(label="Retain case study pages", value=False)
                                 curator_retain_tables = gr.Checkbox(label="Retain table/figure-heavy pages", value=True)
+                        
+                        with gr.Accordion("Image Curator Prompt", open=False):
+                            image_curator_prompt_editor = gr.Textbox(value=IMAGE_CURATOR_PROMPT, lines=10, max_lines=20)
 
                         with gr.Accordion("Fact Extractor Prompt", open=False):
                             extractor_prompt_editor = gr.Textbox(value=EXTRACTOR_PROMPT, lines=10, max_lines=20)
@@ -78,8 +78,8 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
                     
                     image_sources = gr.CheckboxGroup(
                         IMAGE_SOURCES,
-                        label="Image Source Priority & Selection",
-                        info="Select and order sources. The system will try them from top to bottom.",
+                        label="Image Source Selection (Fixed Priority)",
+                        info="The system tries sources from top to bottom. Uncheck to disable a source.",
                         value=["PDF (AI Validated)", "Wikimedia", "NLM Open-i"]
                     )
                     
@@ -96,22 +96,26 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
                 log_output = gr.Textbox(label="Progress", lines=30, interactive=False, autoscroll=True)
                 copy_log_button = gr.Button("Copy Log for Debugging")
         
-        # --- Event Handlers ---
+        # --- Event Handlers (Correctly Indented) ---
         def reset_prompts():
-            return CURATOR_PROMPT, EXTRACTOR_PROMPT, BUILDER_PROMPT, CLOZE_BUILDER_PROMPT, CONCEPTUAL_CLOZE_BUILDER_PROMPT
+            return CURATOR_PROMPT, IMAGE_CURATOR_PROMPT, EXTRACTOR_PROMPT, BUILDER_PROMPT, CLOZE_BUILDER_PROMPT, CONCEPTUAL_CLOZE_BUILDER_PROMPT
 
         def update_decks_from_files_ui(files: List[gr.File]) -> List[Any]:
             return update_decks_from_files(files, max_decks)
         
-        prompt_editors = [curator_prompt_editor, extractor_prompt_editor, builder_prompt_editor, cloze_builder_prompt_editor, conceptual_cloze_builder_prompt_editor]
+        prompt_editors = [curator_prompt_editor, image_curator_prompt_editor, extractor_prompt_editor, builder_prompt_editor, cloze_builder_prompt_editor, conceptual_cloze_builder_prompt_editor]
         
         reset_prompts_button.click(fn=reset_prompts, outputs=prompt_editors)
         master_files.change(fn=update_decks_from_files_ui, inputs=master_files, outputs=[master_files] + deck_ui_components)
         clear_cache_button.click(fn=lambda: clear_cache(*cache_dirs), outputs=[cache_status])
 
         other_settings_and_prompts = [
-            card_type, image_sources, enabled_colors, custom_tags_textbox,
-            curator_retain_case_studies, curator_retain_tables
+            card_type,
+            image_sources,
+            enabled_colors,
+            custom_tags_textbox,
+            curator_retain_case_studies,
+            curator_retain_tables
         ] + prompt_editors
 
         all_gen_inputs = [

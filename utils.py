@@ -112,3 +112,44 @@ def update_decks_from_files(files: List[gr.File], max_decks: int) -> List[Any]:
             gr.update(value=file_value, visible=False)
         ])
     return updates
+
+def slugify(text: str) -> str:
+    """
+    Normalizes a string to be used as a valid filename.
+    Removes illegal characters and replaces spaces with underscores.
+    """
+    text = re.sub(r'[^\w\s-]', '', text).strip().lower()
+    text = re.sub(r'[-\s]+', '_', text)
+    return text
+
+def is_superfluous(text: str) -> bool:
+    """
+    Checks if a line of text is likely superfluous (e.g., a learning objective,
+    a reference, a page number, etc.) using a set of heuristic rules.
+    """
+    text_lower = text.strip().lower()
+
+    # Rule 1: Check for common instructional verbs at the start of a line
+    # (Common in "Learning Objectives" sections)
+    if re.match(r'^\s*(define|describe|explain|list|identify|understand|compare|contrast)', text_lower):
+        return True
+
+    # Rule 2: Check for common "junk" keywords that appear on non-content pages
+    junk_keywords = [
+        'learning objective', 'suggested reading', 'recommended reading',
+        'references', 'bibliography', 'acknowledgements', 'table of contents',
+        'optional case', 'case presentation', 'case report', 'session log'
+    ]
+    if any(keyword in text_lower for keyword in junk_keywords):
+        return True
+
+    # Rule 3: Check for lines that are just URLs
+    if 'http://' in text_lower or 'https://' in text_lower:
+        return True
+        
+    # Rule 4: Check for short, uninformative lines (often stray headers/footers)
+    # Allows for short definitions but filters out 1-2 word lines.
+    if len(text.split()) < 3 and ":" not in text:
+        return True
+
+    return False

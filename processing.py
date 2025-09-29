@@ -31,90 +31,82 @@ NOTE_TYPE_CONFIG = {
     "basic": {
         "modelName": "Anki Deck Generator - Basic",
         "fields": ["Front", "Back", "Image", "Source"],
-       "css": """.card { 
-            font-family: Arial, sans-serif; 
-            font-size: 20px; 
-            text-align: center; 
-         }
-         .content-body {
-            margin: 0 auto;
-            max-width: 90%;
-            text-align: left;
-         }
-         img { max-height: 500px; margin-top: 15px; }
-
-         /* --- HIERARCHICAL LIST STYLING --- */
-
-         ul {
-            list-style-type: none;
-            padding-left: 0;
-            margin: 0;
-         }
-         
-         li {
-            position: relative;
-            padding-left: 1.5em; /* Space for our custom bullet */
-            margin-bottom: 0.75em; /* Spacing between points */
-         }
-
-         li::before {
-            content: '•'; /* The default bullet character */
-            position: absolute;
-            left: 0;
-            top: 0;
-            color: #555;
-         }
-
-         /* --- THE DEFINITIVE FIX FOR HEADERS --- */
-         /* Target any <strong> tag that is the FIRST child of an <li> */
-         li > strong:first-child {
-            display: block;      /* Make the header its own line */
-            margin-left: -1.5em; /* Reclaim the padding space to align with parent */
-            margin-bottom: 0.5em;/* Add space after the header */
-         }
-         /* Now, specifically HIDE the bullet for those list items */
-         li:has(> strong:first-child)::before {
-            content: '';
-         }
-         /* -------------------------------------- */
-
-         /* Style for nested sub-lists */
-         ul ul {
-            margin-top: 0.75em;
-            padding-left: 1.5em; /* Indent the entire sub-list */
-         }
-         ul ul li::before {
-            content: '○'; /* Use an open circle for sub-bullets */
-            color: #888;
-         }
-         """,
-        
+        "css": """.card { 
+                    font-family: Arial, sans-serif; 
+                    font-size: 20px; 
+                    text-align: center; 
+                 }
+                 .content-body {
+                    margin: 0 auto;
+                    max-width: 90%;
+                    text-align: left;
+                 }
+                 img { 
+                    max-height: 500px; 
+                    min-width: 400px;
+                    min-height: 250px;
+                    object-fit: contain;
+                    margin-top: 15px; 
+                 }
+                 ul {
+                    list-style-type: none;
+                    padding-left: 0;
+                    margin: 0;
+                 }
+                 li {
+                    position: relative;
+                    padding-left: 1.5em;
+                    margin-bottom: 0.75em;
+                 }
+                 li::before {
+                    content: '•';
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    color: #555;
+                 }
+                 li > strong:first-child {
+                    display: block;
+                    margin-left: -1.5em;
+                    margin-bottom: 0.5em;
+                 }
+                 li:has(> strong:first-child)::before {
+                    content: '';
+                 }
+                 ul ul {
+                    margin-top: 0.75em;
+                    padding-left: 1.5em;
+                 }
+                 ul ul li::before {
+                    content: '○';
+                    color: #888;
+                 }
+                 """,
         "templates": [
             {
                 "Name": "Card 1", 
-                "Front": "{{Front}}", 
-                "Back": """{{FrontSide}}
-                       <hr id=answer>
-                       <div class="content-body">
-                         {{Back}}
-                       </div>
-                       <br><br>
-                       {{#Image}}{{Image}}{{/Image}}
-                       <div style='font-size:12px; color:grey;'>{{Source}}</div>"""
+                "Front": """<div class="content-body">{{Front}}</div>""", 
+                "Back": """<div class="content-body">{{FrontSide}}</div>
+                           <hr id=answer>
+                           <div class="content-body">{{Back}}</div>
+                           <br><br>
+                           {{#Image}}{{Image}}{{/Image}}
+                           <div style='font-size:12px; color:grey;'>{{Source}}</div>"""
             }
         ],
-    
         "function_tool": {
             "name": "create_anki_card",
             "description": "Creates a single Anki card based on a conceptual chunk of facts.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "Front": {"type": "string", "description": "The specific, 2nd or 3rd-order question for the card's front."},
+                    "Front": {"type": "string", "description": "The specific question for the card's front."},
                     "Back": {"type": "string", "description": "The detailed answer, formatted with hyphenated bullet points and custom tags."},
-                    "Page_numbers": {"type": "array", "items": {"type": "integer"}, "description": "A JSON array of unique integer page numbers from the source facts."},
-                    "Search_Query": {"type": "string", "description": "A concise, 2-4 word search query for finding a relevant medical diagram."}
-                }, "required": ["Front", "Back", "Page_numbers", "Search_Query"]
+                    "Page_numbers": {"type": "array", "items": {"type": "integer"}, "description": "A JSON array of unique integer page numbers."},
+                    "Search_Query": {"type": "string", "description": "A 2-5 word specific query ending in a type like 'diagram'."},
+                    "Simple_Search_Query": {"type": "string", "description": "A 1-3 word query with only the main keywords."}
+                },
+                "required": ["Front", "Back", "Page_numbers", "Search_Query", "Simple_Search_Query"]
             }
         }
     },
@@ -122,8 +114,26 @@ NOTE_TYPE_CONFIG = {
         "modelName": "Anki Deck Generator - Cloze",
         "fields": ["Text", "Extra", "Image", "Source"],
         "isCloze": True,
-        "css": """.card { font-family: Arial; font-size: 20px; text-align: center; } .cloze { font-weight: bold; color: blue; } img { max-height: 500px; }""",
-        "templates": [{"Name": "Cloze Card", "Front": "{{cloze:Text}}", "Back": "{{cloze:Text}}\n\n<br>{{Extra}}\n<br><br>{{#Image}}{{Image}}{{/Image}}\n<div style='font-size:12px; color:grey;'>{{Source}}</div>"}],
+        "css": """.card { font-family: Arial; font-size: 20px; text-align: center; } 
+                 .cloze { font-weight: bold; color: blue; } 
+                 img { 
+                    max-height: 500px;
+                    min-width: 400px;
+                    min-height: 250px;
+                    object-fit: contain;
+                 }""",
+        "templates": [
+            {
+                "Name": "Cloze Card", 
+                "Front": "{{cloze:Text}}", 
+                "Back": """{{cloze:Text}}
+                           <br><br>
+                           {{Extra}}
+                           <br><br>
+                           {{#Image}}{{Image}}{{/Image}}
+                           <div style='font-size:12px; color:grey;'>{{Source}}</div>"""
+            }
+        ],
         "function_tool": {
             "name": "create_cloze_card",
             "description": "Creates a single Anki cloze-deletion card from a fact.",
@@ -135,12 +145,12 @@ NOTE_TYPE_CONFIG = {
                     "Source_Page": {"type": "string", "description": "The source page number(s) for this fact, as a string (e.g., 'Page 5')."},
                     "Search_Query": {"type": "string", "description": "A concise, 2-4 word search query for finding a relevant diagram."},
                     "Simple_Search_Query": {"type": "string", "description": "A broader, 1-3 word fallback query with only the main keywords."}
-                }, "required": ["Context_Question", "Sentence_HTML", "Source_Page", "Search_Query", "Simple_Search_Query"]
+                }, 
+                "required": ["Context_Question", "Sentence_HTML", "Source_Page", "Search_Query", "Simple_Search_Query"]
             }
         }
     }
-} 
-
+}
 # --- Text Sanitization and Formatting Engine ---
 def sanitize_text(text: str) -> str:
     """Cleans text from common PDF/AI artifacts like weird unicode and inconsistent newlines."""
@@ -177,7 +187,6 @@ def build_html_from_tags(text: str, enabled_colors: List[str]) -> str:
     for tag, (key, replacement) in tag_map.items():
         text = text.replace(tag, replacement if key in enabled_colors else "")
 
-    # The clever regex is no longer needed. We trust the AI and the markdown library.
     html = markdown2.markdown(text, extras=["cuddled-lists", "break-on-newline"])
     
     return html.strip()
@@ -187,9 +196,8 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
     pdf_cache_dir.mkdir(exist_ok=True)
     ocr_log = []
     
-    # --- Run the Tesseract configuration ONCE at the start ---
     tesseract_configured = configure_tesseract()
-    tesseract_warning_issued = False # This flag will prevent log spam
+    tesseract_warning_issued = False
 
     def is_text_meaningful(text: str, min_chars: int = 30) -> bool:
         alphanumeric_chars = re.sub(r'[^a-zA-Z0-9]', '', text)
@@ -217,7 +225,7 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
                 if not is_text_meaningful(page_text):
                     page_ocr_logs.append(f"   > Page {page_num}: Low text quality. Attempting OCR fallback.")
                     
-                    if tesseract_configured: # Only try if configuration was successful
+                    if tesseract_configured:
                         try:
                             pix = page.get_pixmap(dpi=300)
                             img_bytes = pix.tobytes("png")
@@ -232,12 +240,11 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
                             page_ocr_logs.append(f"  [OCR Error] Tesseract failed on this page. Error: {ocr_error}")
                             page_text = ""
                     
-                    # If configuration failed, issue a clear warning only once.
                     elif not tesseract_warning_issued:
                         page_ocr_logs.append("  [CRITICAL OCR WARNING] Tesseract is not found in the system PATH or default installation directory.")
                         page_ocr_logs.append("  SOLUTION: Please reinstall Tesseract and ensure you check the 'Add to PATH' option,")
                         page_ocr_logs.append("  or ensure it's installed in 'C:\\Program Files\\Tesseract-OCR\\'.")
-                        tesseract_warning_issued = True # Set flag to prevent re-printing
+                        tesseract_warning_issued = True
 
                 text_content += f"--- Page {page_num} ---\n{page_text}\n\n"
 
@@ -255,16 +262,8 @@ def get_pdf_content(pdf_path: str, pdf_cache_dir: Path) -> Tuple[str, List[str]]
 
 # --- Gemini API Call with Function Calling Support ---
 def call_gemini(prompt: str, api_key: str, model_name: str, tools: Optional[List[Dict]] = None, task_id: str = "generic") -> Any:
-    """
-    Calls the Gemini API, now with the correct URL, a unique task_id,
-    and all robust error handling and response parsing logic.
-    """
-    # The corrected URL
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-    
     headers = {'Content-Type': 'application/json'}
-
-    # Include a comment in the prompt to make it unique
     full_prompt = f"<!-- Task ID: {task_id} | Timestamp: {time.time()} -->\n{prompt}"
     
     payload = {"contents": [{"parts": [{"text": full_prompt}]}]}
@@ -275,20 +274,16 @@ def call_gemini(prompt: str, api_key: str, model_name: str, tools: Optional[List
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=300)
         
-        # Check for specific non-200 status codes first
         if response.status_code == 429: 
             return "API_LIMIT_REACHED"
         
-        # Raise an exception for other bad status codes (like 400, 404, 500)
         response.raise_for_status()
 
         response_data = response.json()
         
-        # Check for safety blocks from the promptFeedback field
         if response_data.get('promptFeedback', {}).get('blockReason'):
             return f"API_SAFETY_BLOCK: {response_data['promptFeedback']['blockReason']}"
 
-        # Check for an empty or missing 'candidates' list
         if not response_data.get('candidates'):
             return f"Warning: Gemini returned a response with no candidates. Full Response: {response.text}"
 
@@ -296,22 +291,18 @@ def call_gemini(prompt: str, api_key: str, model_name: str, tools: Optional[List
         content = candidate.get('content', {})
         parts = content.get('parts', [{}])
 
-        # Check for and return function calls if they exist
         function_calls = [part['functionCall'] for part in parts if 'functionCall' in part]
         if function_calls:
             return function_calls
 
-        # Check for and return standard text if it exists
         if 'text' in parts[0]:
             return parts[0]['text']
 
-        # Fallback for any other unexpected but successful response
         return f"Warning: Gemini returned an empty or unexpected response part. Full Response: {response.text}"
 
     except requests.exceptions.RequestException as e:
         return f"Error calling Gemini API: {e}"
         
-    # Final fallback in case of a very unusual error
     return "Error: An unknown error occurred in the Gemini API call."
 
 # --- AnkiConnect ---
@@ -389,7 +380,7 @@ class DeckProcessor:
         self.rpm_limit_flash = None
         self.pdf_images_cache = []
         self.image_finder = None
-        self.curated_image_pages = [] # Initialize correctly
+        self.curated_image_pages = []
 
     def log(self, message): self.logger_func(message)
 
@@ -417,9 +408,10 @@ class DeckProcessor:
             self.curated_image_pages = self._curate_image_pages()
             
             self._initialize_image_finder()
-            if self.image_finder:
+            if self.image_finder and self.pdf_paths:
                 self.log("\n--- Pre-caching images from AI-curated pages ---")
                 pdf_image_extractor = PDFImageSource()
+                # Ensure we only process the first PDF if multiple are somehow assigned
                 extracted = pdf_image_extractor._extract_images_and_context(self.pdf_paths[0], pages_to_process=self.curated_image_pages)
                 self.pdf_images_cache.extend(extracted)
                 self.log(f"Found and cached {len(self.pdf_images_cache)} images from {len(self.curated_image_pages)} curated pages.")
@@ -439,7 +431,7 @@ class DeckProcessor:
 
         except Exception as e:
             self.log(f"\n--- A CRITICAL ERROR OCCURRED IN DECK '{self.deck_name}' ---\n{e}\nTraceback: {traceback.format_exc()}")
-    # --- REPLACES the old _curate_content ---
+
     def _curate_text_pages(self) -> str:
         self.log("\n--- AI Pass 0: Curating text pages ---")
         case_instruction = "You MUST classify pages containing case studies as 'Core'." if "Include Case Studies" in self.content_options else "You MUST classify pages containing introductory case studies as 'Superfluous'."
@@ -467,31 +459,25 @@ class DeckProcessor:
             self.log(f"   > WARNING: Could not parse curator response. Using all pages. (Error: {e})")
             return self.full_text
 
-    # --- NEW METHOD for Image Curation ---
     def _curate_image_pages(self) -> List[int]:
         self.log("\n--- AI Pass 0.5: Curating visually significant pages for image search ---")
         
-        # --- NEW: Ground the AI by finding the total number of pages first ---
         all_page_nums = [int(p) for p in re.findall(r'--- Page (\d+) ---', self.full_text)]
         if not all_page_nums:
             self.log("   > WARNING: Could not determine page count. Image curation will be less reliable.")
-            return [] # Cannot proceed without a page count
+            return []
         total_pages = max(all_page_nums)
 
-        # Format the prompt with the total page count
         prompt = self.prompts_dict['image_curator'].format(total_pages=total_pages)
         response = call_gemini(prompt + "\n\n--- TEXT ---\n" + self.full_text, self.api_keys["GEMINI_API_KEY"], model_name=self.flash_model, task_id="curate_images")
 
         if "API_" in str(response) or not response:
             self.log("   > WARNING: AI image curation failed. Image search will consider all pages.")
-            return all_page_nums # Fallback to all pages
+            return all_page_nums
         try:
-            # Step 1: Extract all numbers from the (potentially messy) response
             page_numbers_str = re.findall(r'\d+', response)
             if not page_numbers_str: raise ValueError("No numbers found.")
 
-            # --- NEW: The Sanity Check ---
-            # Step 2: Filter the list to only include valid page numbers
             pages_to_keep = [p for p in {int(p) for p in page_numbers_str} if 1 <= p <= total_pages]
             
             invalid_pages_found = len(page_numbers_str) - len(pages_to_keep)
@@ -532,16 +518,13 @@ class DeckProcessor:
     def _extract_facts(self, text_to_process: str) -> Optional[List[Dict[str, Any]]]:
         self.log("\n--- AI Pass 1: Extracting atomic facts from curated text... ---")
         extractor_model = self.flash_model
-
-        # --- THIS IS THE KEY FIX ---
-        # It now uses the 'text_to_process' variable passed to it, not the old self.full_text
+        
         page_pattern = re.compile(r'--- Page (\d+) ---\n(.*?)(?=--- Page \d+ ---|\Z)', re.DOTALL)
         all_pages = [(int(num), content) for num, content in page_pattern.findall(text_to_process) if len(content.strip()) > 50]
 
         if not all_pages:
             self.log("ERROR: No pages with sufficient text content found after curation and cleaning."); return None
         
-        # The rest of the batching and parallel processing logic is correct and does not need changes.
         batched_tasks = []
         for i in range(0, len(all_pages), BATCH_SIZE):
             batch = all_pages[i:i + BATCH_SIZE]
@@ -646,32 +629,36 @@ class DeckProcessor:
         return card_generation_result
 
     def _parse_and_deduplicate(self, card_function_calls: List[Dict]) -> Optional[List[Dict]]:
-        if isinstance(card_function_calls, dict):
-            card_function_calls = [card_function_calls]
-
         if not isinstance(card_function_calls, list):
-            self.log("CRITICAL ERROR: AI response was not a list or a single function call object. AI may have failed to follow instructions."); return None
+            self.log("CRITICAL ERROR: AI response was not a list of function call parts. AI may have failed to follow instructions."); return None
 
         self.log("\n--- Parsing AI Function Call Response ---")
         final_cards = []
+        
+        # This is the corrected loop that handles the direct list of function calls.
         for call in card_function_calls:
-            call = call.get('functionCall', call)
             args = call.get("args", {})
             card = None
 
-            sanitized_args = {k: sanitize_text(v) if isinstance(v, str) else v for k, v in args.items()}
-
             if call.get("name") == "create_anki_card":
-                page_nums = sorted(list(set(sanitized_args.get("Page_numbers", [1]))))
+                page_nums_raw = args.get("Page_numbers", [1])
+                page_nums = sorted(list(set(page_nums_raw))) if isinstance(page_nums_raw, list) else [1]
+                
                 card = {
-                    "type": "basic", "front": sanitized_args.get("Front"), "back_text": sanitized_args.get("Back"),
-                    "image_search_query": sanitized_args.get("Search_Query"), "page_numbers": page_nums
+                    "type": "basic", "front": args.get("Front"), "back_text": args.get("Back"),
+                    "image_search_query": args.get("Search_Query"),
+                    "simple_search_query": args.get("Simple_Search_Query"),
+                    "page_numbers": page_nums
                 }
             elif call.get("name") == "create_cloze_card":
+                page_str = args.get("Source_Page", "1")
+                page_num = int(re.search(r'\d+', page_str).group()) if re.search(r'\d+', page_str) else 1
                 card = {
-                    "type": "cloze", "original_question": sanitized_args.get("Context_Question"),
-                    "sentence_html": sanitized_args.get("Sentence_HTML"), "image_search_query": sanitized_args.get("Search_Query"),
-                    "page_numbers": [int(re.search(r'\d+', sanitized_args.get("Source_Page", "1")).group())]
+                    "type": "cloze", "original_question": args.get("Context_Question"),
+                    "sentence_html": args.get("Sentence_HTML"),
+                    "image_search_query": args.get("Search_Query"),
+                    "simple_search_query": args.get("Simple_Search_Query"),
+                    "page_numbers": [page_num]
                 }
 
             if card: final_cards.append(card)
@@ -695,6 +682,10 @@ class DeckProcessor:
     def _add_notes_to_anki(self, final_cards: List[Dict]):
         self.log(f"\n--- Adding Cards to Deck: '{self.deck_name}' ---")
         cards_added, cards_skipped, cards_failed = 0, 0, 0
+        
+        # Ensure pdf_paths[0] is safe to access
+        main_pdf_path = self.pdf_paths[0] if self.pdf_paths else "Unknown.pdf"
+
         for card_data in self.progress.tqdm(final_cards, desc="Adding Cards to Anki"):
             try:
                 image_html = None
@@ -703,30 +694,25 @@ class DeckProcessor:
                 if self.image_finder and card_data.get("image_search_query"):
                     search_queries = [q for q in [card_data.get("image_search_query"), card_data.get("simple_search_query")] if q]
 
-                    # --- NEW, ROBUST PAGE LIST GENERATION ---
-                    # 1. Create the focused list (intersection of card pages and curated pages).
                     focused_pages = [p for p in full_source_page_numbers if p in self.curated_image_pages]
-                    if len(focused_pages) > 3:
-                        focused_pages = focused_pages[:3]
+                    if len(focused_pages) > 3: focused_pages = focused_pages[:3]
 
-                    # 2. Create the expanded list (card pages +/- 1, THEN filtered by the curator).
                     min_page = min(full_source_page_numbers) if full_source_page_numbers else 0
                     max_page = max(full_source_page_numbers) if full_source_page_numbers else 0
                     expanded_range = list(range(max(1, min_page - 1), max_page + 2))
                     expanded_pages = [p for p in expanded_range if p in self.curated_image_pages]
                     
-                    # This is now the single, clean call to the ImageFinder.
                     image_html = self.image_finder.find_best_image(
                         query_texts=search_queries,
                         clip_model=self.clip_model,
-                        pdf_path=self.pdf_paths[0],
+                        pdf_path=main_pdf_path,
                         pdf_images_cache=self.pdf_images_cache,
                         focused_search_pages=focused_pages,
-                        expanded_search_pages=expanded_pages # Pass the new expanded list
+                        expanded_search_pages=expanded_pages
                     )
 
                 page_str = f"Pgs {', '.join(map(str, sorted(list(set(full_source_page_numbers)))))}"
-                source_text = f"{Path(self.pdf_paths[0]).stem} - {page_str}"
+                source_text = f"{Path(main_pdf_path).stem} - {page_str}"
                 
                 fields, final_note_type_key = {}, None
 
@@ -752,7 +738,7 @@ class DeckProcessor:
                     cards_skipped += 1
                     continue
 
-                _, error = add_note_to_anki(self.deck_name, final_note_type_key, fields, self.pdf_paths[0], self.custom_tags)
+                _, error = add_note_to_anki(self.deck_name, final_note_type_key, fields, main_pdf_path, self.custom_tags)
                 if error:
                     if "duplicate" in error:
                         cards_skipped += 1
@@ -766,9 +752,9 @@ class DeckProcessor:
                 self.log(f"ERROR processing card data: '{str(card_data)[:500]}...' | Exception: {e}")
 
         self.log(f"\n--- Final Tally ---\nCards Added: {cards_added}\nCards Skipped/Failed: {cards_skipped + cards_failed}")
+
 # --- Main Generator Function ---
 def generate_all_decks(max_decks: int, *args):
-    # This robustly unpacks all arguments passed from the UI
     master_files, generate_button, log_output, clip_model, *remaining_args = args
     
     log_history = ""
@@ -798,15 +784,9 @@ def generate_all_decks(max_decks: int, *args):
         if curator_retain_cases: content_options.append("Include Case Studies")
         if curator_retain_tables: content_options.append("Include Summary Tables")
         
-        # --- THIS IS THE CORRECTED DICTIONARY ---
-        # The order of keys now correctly maps to the order of the 'prompts' list
         prompts_dict = {
-            'curator': prompts[0],
-            'image_curator': prompts[1],
-            'extractor': prompts[2],
-            'builder': prompts[3],
-            'cloze_builder': prompts[4],
-            'conceptual_cloze_builder': prompts[5]
+            'curator': prompts[0], 'image_curator': prompts[1], 'extractor': prompts[2],
+            'builder': prompts[3], 'cloze_builder': prompts[4], 'conceptual_cloze_builder': prompts[5]
         }
         
         custom_tags = [tag.strip() for tag in custom_tags_str.split(',') if tag.strip()]
@@ -839,6 +819,7 @@ def generate_all_decks(max_decks: int, *args):
             yield log_history, gr.update(), gr.update()
             yield logger(f"--- Finished Deck {i}: '{deck_name}' ---\n"), gr.update(), gr.update()
             if i < len(deck_configs):
+                yield logger(f"--- Cooling down for {INTER_DECK_COOLDOWN_SECONDS} seconds before next deck... ---"), gr.update(), gr.update()
                 time.sleep(INTER_DECK_COOLDOWN_SECONDS)
                 
         logger("--- All Decks Processed! ---")

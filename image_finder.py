@@ -1,5 +1,3 @@
-# image_finder.py (Corrected)
-
 import os
 import re
 import io
@@ -9,6 +7,7 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import fitz
 import requests
+import pytesseract
 from PIL import Image, UnidentifiedImageError
 from sentence_transformers import SentenceTransformer, util
 
@@ -83,8 +82,6 @@ class ImageSource(ABC):
 
     def __repr__(self):
         return f"<{self.__class__.__name__}: {self.name} (Enabled: {self.is_enabled})>"
-
-# image_finder.py (FINAL, COMPLETE PDFImageSource Class)
 
 class PDFImageSource(ImageSource):
     """Strategy to extract and validate images directly from a PDF."""
@@ -231,12 +228,11 @@ class WebImageSource(ImageSource):
             print(f"[{self.name}] WARNING: Env variable '{api_key_name}' not set. Disabling this source.")
             self.is_enabled = False
         self.session = requests.Session()
-        self.session.headers.update({'User-Agent': 'AnkiDeckGenerator/3.0 (https://github.com/your-repo)'})
+        self.session.headers.update({'User-Agent': 'AnkiDeckGenerator/4.0'})
 
 
 class WikimediaSource(WebImageSource):
     """Strategy to find images from Wikimedia Commons."""
-    # --- CORRECTED: Added __init__ method ---
     def __init__(self):
         super().__init__(name="Wikimedia")
 
@@ -281,11 +277,9 @@ class NLMOpenISource(WebImageSource):
 
     def search(self, query_text: str, clip_model: SentenceTransformer, **kwargs) -> Optional[Dict[str, Any]]:
         print(f"[{self.name}] Searching for: '{query_text}'")
-        # --- THE CORRECTED URL and PARAMS ---
         API_URL = "https://openi.nlm.nih.gov/api/search"
         params = {"query": query_text, "it": "xg", "m": "1", "n": "5"}
         try:
-            # Use `requests.get` which will handle URL encoding correctly
             response = self.session.get(API_URL, params=params, timeout=15)
             response.raise_for_status()
             data = response.json().get("list", [])
@@ -302,7 +296,6 @@ class NLMOpenISource(WebImageSource):
 
 class OpenverseSource(WebImageSource):
     """Strategy to find images from Openverse."""
-    # --- CORRECTED: Added __init__ method that passes the name ---
     def __init__(self, api_key: Optional[str] = None, api_key_name: str = ""):
         super().__init__(name="Openverse", api_key=api_key, api_key_name=api_key_name)
 
@@ -330,7 +323,6 @@ class OpenverseSource(WebImageSource):
 
 class FlickrSource(WebImageSource):
     """Strategy to find images from Flickr, filtered by license."""
-    # --- CORRECTED: Added __init__ method that passes the name ---
     def __init__(self, api_key: Optional[str] = None, api_key_name: str = ""):
         super().__init__(name="Flickr", api_key=api_key, api_key_name=api_key_name)
 
@@ -408,10 +400,13 @@ class ImageFinder:
         """
         A helper method to log success, optimize, and encode the winning image.
         """
-        score = result['score']
-        source = result['source']
-        image_bytes = result['image_bytes']
+        score = result.get('score', 0.0) # Use .get for safety
+        source = result.get('source', 'Unknown')
+        image_bytes = result.get('image_bytes')
         
+        if not image_bytes:
+            return None
+
         print(f"--- SUCCESS: Found suitable image via {source} with score {score:.2f}. Halting search for this card. ---")
 
         if optimized_bytes := _optimize_image(image_bytes):

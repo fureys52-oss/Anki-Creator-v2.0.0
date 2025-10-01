@@ -10,7 +10,7 @@ You need a few key programs installed on your system first.
 1A. Install Python
 
 On Windows:
-- Download: Get Python 3.9 or newer from python.org.
+- Download: Get Python 3.9 or newer from python.org. 
 - Install: Run the installer. CRITICAL: On the first screen of the installer, you must check the box that says "Add Python to PATH".
 
 On macOS:

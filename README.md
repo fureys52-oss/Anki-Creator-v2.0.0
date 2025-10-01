@@ -65,33 +65,33 @@ Step 5: Run the Application!
 A terminal or command prompt window will appear, and your web browser will open with the application's interface.
 
 Step 6: Create a Desktop Shortcut (Optional)
-On Windows:
-Place your desired icon in the main project folder and rename it to icon.ico.
-Double-click Create_Shortcut.bat. This will automatically place a shortcut on your Desktop with your custom icon.
-On macOS:
-Double-click create_shortcut.command to place a shortcut on your Desktop.
-To apply a custom icon, follow the manual steps:
-Open your icon file (.ico, .png, etc.) in the Preview app.
-Press Cmd+A (Select All), then Cmd+C (Copy).
-Right-click the shortcut on your Desktop and choose "Get Info".
-Click the small icon in the top-left of the "Get Info" window (it will get a blue highlight).
-Press Cmd+V (Paste). The icon will be replaced.
+- On Windows:
+  - Place your desired icon in the main project folder and rename it to icon.ico.
+  - Double-click Create_Shortcut.bat. This will automatically place a shortcut on your Desktop with your custom icon.
+- On macOS:
+  - Double-click create_shortcut.command to place a shortcut on your Desktop.
+  - To apply a custom icon, follow the manual steps:
+  - Open your icon file (.ico, .png, etc.) in the Preview app.
+  - Press Cmd+A (Select All), then Cmd+C (Copy).
+  - Right-click the shortcut on your Desktop and choose "Get Info".
+  - Click the small icon in the top-left of the "Get Info" window (it will get a blue highlight).
+  - Press Cmd+V (Paste). The icon will be replaced.
 
 
 
 
 
 How to Use the Application
-The interface is divided into a few key areas.
+- The interface is divided into a few key areas.
 
-1. Decks & Files Tab
+-  1. Decks & Files Tab
 This is where you start.
 
 Upload PDFs: Click the "Upload PDFs" box and select one or more PDF files you want to turn into flashcards.
 
 Automatic Deck Creation: The application will automatically create a separate "Deck" accordion for each PDF you upload. It intelligently guesses a deck title (e.g., "L01 - Introduction to Biology") based on the PDF's filename. You can edit this title at any time.
 
-2. Core Settings Panel
+- 2. Core Settings Panel
 This panel on the right controls the main generation options.
 
 Card Type:
@@ -120,7 +120,7 @@ Add any Anki tags you want applied to all generated cards, separated by commas (
 
 
 
-3. Running the Generator
+- 3. Running the Generator
 Generate All Decks: Once your PDFs are uploaded and settings are configured, click this button to start the process.
 
 Session Log: This text box provides a real-time log of the entire process, from PDF processing to AI calls and adding notes to Anki. It is invaluable for understanding what the program is doing.

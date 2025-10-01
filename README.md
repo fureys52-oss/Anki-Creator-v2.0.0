@@ -12,14 +12,16 @@ Install: Run the installer. CRITICAL: On the first screen of the installer, you 
 On macOS:
 Install Homebrew: If you don't have it, open the Terminal app and install the Homebrew package manager from brew.sh.
 Install Python: In your Terminal, run the command: brew install python3
+
 1B. Install Anki & AnkiConnect (Universal)
-Anki: Get the latest version from apps.ankiweb.net and install it.
-AnkiConnect: Open Anki, go to Tools > Add-ons, click "Get Add-ons..." and paste in the code: 2055492159. Restart Anki when prompted.
+- Anki: Get the latest version from apps.ankiweb.net and install it.
+- AnkiConnect: Open Anki, go to Tools > Add-ons, click "Get Add-ons..." and paste in the code: 2055492159. Restart Anki when prompted.
+
 1C. Install Tesseract OCR Engine
-On Windows:
+- On Windows:
 Download: Get the installer from the official source: Tesseract at UB Mannheim.
 Install: Run the installer. It is recommended to keep the default installation path.
-On macOS:
+- On macOS:
 In your Terminal, run the command: brew install tesseract
 
 Step 2: Download and Prepare the Project
@@ -31,17 +33,13 @@ This one-time step creates a local Python environment and installs all required 
 On Windows:
 In the project folder, double-click the setup.bat file. Wait for the command prompt window to finish and close.
 On macOS:
-First-Time Setup (Permissions): Before you can run the scripts, you must give them permission. This is a one-time setup step.
-Open the Terminal app (you can find it in Applications/Utilities).
-Type cd (the letters c and d, followed by a space). Do not press Enter yet.
-Locate your project folder in Finder.
-Drag the project folder from Finder and drop it directly onto the Terminal window. The path to the folder will be automatically typed for you.
-Now, click on the Terminal window and press Enter. Your terminal prompt should now show the name of the project folder.
-Finally, copy and paste the following command into the Terminal and press Enter:
-code
-Sh
+1 Open the Terminal app.
+2 Type cd (the letters c and d, followed by a space).
+3 Drag your project folder from Finder and drop it onto the Terminal window.
+4 Press Enter.
+5 Copy and paste the following command, then press Enter:
 chmod +x setup.command run.command create_shortcut.command
-Run Setup: Now that permissions are set, you can close the Terminal. In Finder, double-click the setup.command file.
+6 Run setup.command in your project folder by double cicking it.
 
 Step 4: Configure Your API Key (Universal)
 Go to aistudio.google.com and get your API Key.

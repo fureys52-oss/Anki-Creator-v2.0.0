@@ -14,7 +14,7 @@ On Windows:
 - Install: Run the installer. CRITICAL: On the first screen of the installer, you must check the box that says "Add Python to PATH".
 
 On macOS:
-- Open the Terminal app (found in applications/utilities) and run the following command: xcode-select --install
+- Open the Terminal app (found in applications/utilities) and run the following command:  xcode-select --install
 - Install Homebrew: If you don't have it, open the Terminal app and install the Homebrew package manager from brew.sh (its a website)
 - Install Python: In your Terminal, run the command: brew update && brew install python3
 
@@ -27,7 +27,7 @@ On macOS:
   - Download: Get the installer from the official source: Tesseract at UB Mannheim.
   - Install: Run the installer. It is recommended to keep the default installation path.
 - On macOS:
-  - In your Terminal, run the command: brew install tesseract
+  - In your Terminal, run the command:   brew install tesseract
 
 Step 2: Download and Prepare the Project
 - Download: Click the green <> Code button at the top of the GitHub page and select "Download ZIP".
@@ -44,7 +44,7 @@ Step 3: Run the Setup Script
   - 3 Drag your project folder from Finder and drop it onto the Terminal window.
   - 4 Press Enter.
   - 5 Copy and paste the following command, then press Enter:
-chmod +x setup.command run.command create_shortcut.command
+  chmod +x setup.command run.command create_shortcut.command
   - 6 Run setup.command in your project folder by double cicking it.
 
 Step 4: Configure Your API Key (Universal)
@@ -55,7 +55,7 @@ Step 4: Configure Your API Key (Universal)
   - Replace YOUR_API_KEY_HERE with the key you copied from the Google AI Studio website.
   - Save and close the file.
 - On macOS: 
-  - Open the Terminal, navigate to the project folder (using the cd and drag-and-drop trick from Step 3), and run the command: cp .env.template .env
+  - Open the Terminal, navigate to the project folder (using the cd and drag-and-drop trick from Step 3), and run the command:   cp .env.template .env
   - Open the new .env file with a text editor (like Notepad or TextEdit), paste your API key, and save.
 
 Step 5: Run the Application!

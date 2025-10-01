@@ -168,7 +168,7 @@ class PDFImageSource(ImageSource):
         print(f"[{self.name}] No suitable VISUAL image found in PDF. Forcing fallback to web sources.")
         return None
 
-    def _find_best_match_in_list(self, image_list: List[Dict], query_text: str, clip_model: SentenceTransformer) -> tuple[Optional[Dict], float]:
+    def _find_best_match_in_list(self, image_list: List[Dict], query_text: str, clip_model: SentenceTransformer) -> Tuple[Optional[Dict], float]:
         best_match = None
         highest_score = 0.0
         for item in image_list:

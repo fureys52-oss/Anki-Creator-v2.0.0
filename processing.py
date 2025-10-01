@@ -270,7 +270,7 @@ RULES:
         return code
 
 # --- AnkiConnect ---
-def invoke_ankiconnect(action: str, **params: Any) -> Tuple[Any | None, str | None]:
+def invoke_ankiconnect(action: str, **params: Any) -> Tuple[Optional[Any], Optional[str]]:
     try:
         response = requests.post(ANKI_CONNECT_URL, json={"action": action, "version": 6, "params": params}, timeout=30)
         response.raise_for_status()

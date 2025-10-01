@@ -153,12 +153,40 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
         card_type.change(fn=toggle_settings_visibility, inputs=card_type, outputs=[basic_card_settings_accordion, cloze_card_settings_accordion, mermaid_card_settings_accordion])
 
         other_settings_and_prompts = [
-            card_type, image_sources, pos_color_picker, neg_color_picker, ex_color_picker, tip_color_picker,
-            min_chars_input, max_chars_input, char_target_slider, cloze_color_picker, mermaid_theme_dropdown, 
-            custom_tags_textbox, content_strategy, objectives_textbox,
-            builder_user_instructions, atomic_cloze_user_instructions, contextual_cloze_user_instructions, mermaid_user_instructions,
-            builder_prompt_template, atomic_cloze_prompt_template, contextual_cloze_prompt_template, mermaid_prompt_template,
-            curator_prompt_editor, extractor_prompt_editor, objective_finder_prompt_editor, image_curator_prompt_editor
+            # Core Settings
+            card_type,
+            image_sources,
+            # Basic Card Settings
+            pos_color_picker,
+            neg_color_picker,
+            ex_color_picker,
+            tip_color_picker,
+            min_chars_input,
+            max_chars_input,
+            char_target_slider,
+            # Cloze Settings
+            cloze_color_picker,
+            # Mermaid Settings
+            mermaid_theme_dropdown,
+            # Other Settings
+            custom_tags_textbox,
+            content_strategy,
+            objectives_textbox,
+            # User Instructions
+            builder_user_instructions,
+            atomic_cloze_user_instructions,
+            contextual_cloze_user_instructions,
+            mermaid_user_instructions,
+            # Hidden Templates
+            builder_prompt_template,
+            atomic_cloze_prompt_template,
+            contextual_cloze_prompt_template,
+            mermaid_prompt_template,
+            # Editable Prompts
+            curator_prompt_editor,
+            extractor_prompt_editor,
+            objective_finder_prompt_editor,
+            image_curator_prompt_editor
         ]
 
         all_gen_inputs = [master_files, generate_button, log_output, clip_model_state] + deck_input_components + other_settings_and_prompts

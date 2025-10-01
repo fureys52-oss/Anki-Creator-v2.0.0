@@ -867,27 +867,41 @@ def generate_all_decks(max_decks: int, *args):
     log_file_path = None
     
     settings_keys = [
-        # Core Settings
-        "card_type", "image_sources",
-        # Basic Card Settings
-        "pos_color", "neg_color", "ex_color", "tip_color",
-        "min_chars", "max_chars", "char_target",
-        # Cloze Settings
-        "cloze_color",
-        # Mermaid Settings
-        "mermaid_theme",
-        # Other - The order was wrong here
-        "custom_tags", "content_strategy", "objectives_text_manual",
-        # User Instructions for Builder Prompts
-        "builder_user_instructions", "atomic_cloze_user_instructions",
-        "contextual_cloze_user_instructions", "mermaid_user_instructions",
-        # Hidden Prompt Templates
-        "builder_prompt_template", "atomic_cloze_prompt_template",
-        "contextual_cloze_prompt_template", "mermaid_prompt_template",
-        # Fully Editable Protected Prompts
-        "curator_prompt", "extractor_prompt",
-        "objective_finder_prompt", "image_curator_prompt"
-    ]
+            # Core Settings
+            "card_type",
+            "image_sources",
+            # Basic Card Settings
+            "pos_color",
+            "neg_color",
+            "ex_color",
+            "tip_color",
+            "min_chars",
+            "max_chars",
+            "char_target",
+            # Cloze Settings
+            "cloze_color",
+            # Mermaid Settings
+            "mermaid_theme",
+            # Other Settings
+            "custom_tags",
+            "content_strategy",
+            "objectives_text_manual",
+            # User Instructions
+            "builder_user_instructions",
+            "atomic_cloze_user_instructions",
+            "contextual_cloze_user_instructions",
+            "mermaid_user_instructions",
+            # Hidden Templates
+            "builder_prompt_template",
+            "atomic_cloze_prompt_template",
+            "contextual_cloze_prompt_template",
+            "mermaid_prompt_template",
+            # Editable Prompts
+            "curator_prompt",
+            "extractor_prompt",
+            "objective_finder_prompt",
+            "image_curator_prompt"
+        ]
     
     deck_inputs_flat = remaining_args[:max_decks * 2]
     settings_and_prompts_values = remaining_args[max_decks * 2:]

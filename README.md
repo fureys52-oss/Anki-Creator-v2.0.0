@@ -3,15 +3,17 @@ https://www.youtube.com/watch?v=Y-DRC4Ei6E4
 
 Installation & Setup (Windows & macOS)
 Follow these steps to get the application running on your computer.
+
 Step 1: Install External Dependencies
 You need a few key programs installed on your system first.
+
 1A. Install Python
 On Windows:
 Download: Get Python 3.9 or newer from python.org.
 Install: Run the installer. CRITICAL: On the first screen of the installer, you must check the box that says "Add Python to PATH".
 On macOS:
 Install Homebrew: If you don't have it, open the Terminal app and install the Homebrew package manager from brew.sh.
-Install Python: In your Terminal, run the command: brew install python3
+Install Python: In your Terminal, run the command: brew update && brew install python3
 
 1B. Install Anki & AnkiConnect (Universal)
 - Anki: Get the latest version from apps.ankiweb.net and install it.
@@ -30,8 +32,10 @@ Extract: Extract the .zip file to a permanent folder on your computer (e.g., C:\
 
 Step 3: Run the Setup Script
 This one-time step creates a local Python environment and installs all required libraries.
+
 On Windows:
 In the project folder, double-click the setup.bat file. Wait for the command prompt window to finish and close.
+
 On macOS:
 1 Open the Terminal app.
 2 Type cd (the letters c and d, followed by a space).
@@ -42,11 +46,15 @@ chmod +x setup.command run.command create_shortcut.command
 6 Run setup.command in your project folder by double cicking it.
 
 Step 4: Configure Your API Key (Universal)
-Go to aistudio.google.com and get your API Key.
+Go to aistudio.google.com and get your API Key. Just click th get api key button at the bottom left.
+On Windows: 
 In the project folder, find the file named .env.template and rename it to .env.
 Open the new .env file with a text editor (like Notepad or TextEdit).
 Replace YOUR_API_KEY_HERE with the key you copied from the Google AI Studio website.
 Save and close the file.
+On macOS: 
+Open the Terminal, navigate to the project folder (using the cd and drag-and-drop trick from Step 3), and run the command: cp .env.template .env
+Open the new .env file with a text editor (like Notepad or TextEdit), paste your API key, and save.
 
 Step 5: Run the Application!
 IMPORTANT: Make sure the main Anki application is open and running on your desktop.

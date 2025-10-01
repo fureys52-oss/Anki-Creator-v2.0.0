@@ -5,7 +5,7 @@ import base64
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple
 
-import fitz
+import fitz  # PyMuPDF, used for robust image handling
 import requests
 import pytesseract
 from PIL import Image, UnidentifiedImageError
@@ -13,10 +13,8 @@ from sentence_transformers import SentenceTransformer, util
 
 def _optimize_image(image_bytes: bytes) -> Optional[bytes]:
     try:
-        # This function now only ever receives standard, Pillow-compatible formats.
         image = Image.open(io.BytesIO(image_bytes))
         
-        # This logic for handling transparency and converting to RGB remains essential.
         if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
             background = Image.new("RGB", image.size, (255, 255, 255))
             background.paste(image, (0, 0), image.convert("RGBA"))
@@ -30,10 +28,10 @@ def _optimize_image(image_bytes: bytes) -> Optional[bytes]:
         image.save(byte_arr, format='JPEG', quality=85, optimize=True)
         return byte_arr.getvalue()
     except Exception as e:
-        # A general exception handler is still good practice.
         print(f"Error optimizing image: {e}")
         return None
 
+# --- NEW: Robust Image Downloader ---
 def _download_image(url: str, headers: Dict[str, str]) -> Optional[bytes]:
     """
     Downloads image content from a URL and uses fitz to convert any format
@@ -44,7 +42,7 @@ def _download_image(url: str, headers: Dict[str, str]) -> Optional[bytes]:
         response.raise_for_status()
         image_bytes = response.content
 
-        # Universal image conversion using fitz
+        # Universal image conversion using fitz handles almost any web format
         try:
             with fitz.open(stream=image_bytes, filetype="image") as doc:
                 page = doc.load_page(0)
@@ -57,7 +55,6 @@ def _download_image(url: str, headers: Dict[str, str]) -> Optional[bytes]:
     except requests.RequestException as e:
         print(f"Error downloading image from {url}: {e}")
         return None
-# --- The Strategy Pattern: Interfaces and Classes ---
 
 class ImageSource(ABC):
     """Abstract base class for any image-finding strategy."""
@@ -370,15 +367,14 @@ class ImageFinder:
         for query in query_texts:
             try:
                 query_to_use = query
-                # Use the more aggressive simplification for web sources
+                # --- NEW: Simplify query for web sources to improve match rate ---
                 if isinstance(strategy, WebImageSource):
                     image_type_words = ['diagram', 'illustration', 'chart', 'micrograph', 'photo', 'map']
                     simplified_parts = [word for word in query.split() if word.lower() not in image_type_words]
-                    query_to_use = " ".join(simplified_parts[:3]) if len(simplified_parts) > 3 else " ".join(simplified_parts)
+                    query_to_use = " ".join(simplified_parts)
                     if query_to_use != query:
                         print(f"[{strategy.name}] Using simplified query for '{query}': '{query_to_use}'")
                 
-                # Call the strategy with the current query variant.
                 result = strategy.search(
                     query_to_use, 
                     clip_model=clip_model, 
@@ -387,7 +383,6 @@ class ImageFinder:
                     **kwargs
                 )
                 
-                # If this query gives a better result for this strategy, store it.
                 if result and result.get("score", 0) > best_result_for_strategy.get("score", 0):
                     best_result_for_strategy = result
 
@@ -400,14 +395,14 @@ class ImageFinder:
         """
         A helper method to log success, optimize, and encode the winning image.
         """
-        score = result.get('score', 0.0) # Use .get for safety
+        score = result.get('score', 0.0)
         source = result.get('source', 'Unknown')
         image_bytes = result.get('image_bytes')
         
         if not image_bytes:
             return None
 
-        print(f"--- SUCCESS: Found suitable image via {source} with score {score:.2f}. Halting search for this card. ---")
+        print(f"--- SUCCESS: Found suitable image via {source} with score {score:.2f}. Halting search. ---")
 
         if optimized_bytes := _optimize_image(image_bytes):
             b64_image = base64.b64encode(optimized_bytes).decode('utf-8')
@@ -416,29 +411,30 @@ class ImageFinder:
             print(f"--- WARNING: Found image via {source}, but failed to optimize it. ---")
             return None
 
+    # --- MODIFIED: Implements new tiered search logic ---
     def find_best_image(self, query_texts: List[str], clip_model: SentenceTransformer, pdf_path: Optional[str] = None, focused_search_pages: Optional[List[int]] = None, expanded_search_pages: Optional[List[int]] = None, **kwargs) -> Optional[str]:
         
         pdf_strategy = next((s for s in self.strategies if isinstance(s, PDFImageSource)), None)
 
         if pdf_strategy:
-            # TIER 1: FOCUSED PDF SEARCH
+            # TIER 1: FOCUSED PDF SEARCH (Exact pages from the card)
             if focused_search_pages:
-                print(f"\n--- Trying Strategy: {pdf_strategy.name} (Focused Search on pages {focused_search_pages}) ---")
+                print(f"\n--- Tier 1: Trying {pdf_strategy.name} (Focused Search on pages {focused_search_pages}) ---")
                 best_result = self._run_search_for_strategy(pdf_strategy, query_texts, clip_model, pdf_path, focused_search_pages, **kwargs)
                 if best_result.get("image_bytes"):
                     return self._finalize_image(best_result)
 
-            # TIER 2: EXPANDED PDF SEARCH
+            # TIER 2: EXPANDED PDF SEARCH (Nearby pages as a fallback)
             if expanded_search_pages:
-                print(f"\n--- Trying Strategy: {pdf_strategy.name} (Expanded Search on pages {expanded_search_pages}) ---")
+                print(f"\n--- Tier 2: Trying {pdf_strategy.name} (Expanded Search on pages {expanded_search_pages}) ---")
                 best_result = self._run_search_for_strategy(pdf_strategy, query_texts, clip_model, pdf_path, expanded_search_pages, **kwargs)
                 if best_result.get("image_bytes"):
                     return self._finalize_image(best_result)
 
-        # TIER 3: WEB SEARCH
+        # TIER 3: WEB SEARCH (If PDF search fails or is disabled)
         web_strategies = [s for s in self.strategies if isinstance(s, WebImageSource)]
         if web_strategies:
-            print("\n--- PDF Search failed or was skipped. Trying web sources... ---")
+            print("\n--- Tier 3: PDF Search failed or skipped. Trying web sources... ---")
             for strategy in web_strategies:
                 print(f"\n--- Trying Strategy: {strategy.name} (Web Search) ---")
                 best_result = self._run_search_for_strategy(strategy, query_texts, clip_model, pdf_path, None, **kwargs)

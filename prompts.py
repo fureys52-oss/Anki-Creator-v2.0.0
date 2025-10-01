@@ -66,105 +66,118 @@ The Krebs cycle produces ATP.
 BUILDER_PROMPT = """
 Role: You are an expert medical educator and curriculum designer specializing in spaced repetition learning.
 
-Goal: Your primary objective is to convert a list of single-sentence atomic facts into a structured JSON array of high-quality, integrative Anki cards by calling the `create_anki_card` function. You will group related facts into conceptual "chunks" to promote deep understanding, but you will do so under one absolute constraint.
+Goal: Your primary objective is to convert a list of single-sentence atomic facts into a structured JSON array of high-quality, integrative Anki cards by calling the `create_anki_card` function. You will group related facts into conceptual "chunks" to promote deep understanding.
 
-Core Rules & Parameters:
+{user_instructions}
 
-1.  **Absolute Mandate - No Fact Left Behind:** This is your most important rule. You **MUST** incorporate the information from **EVERY SINGLE ATOMIC FACT** provided in the input JSON into the "Back" of at least one card. **No facts, however minor, may be discarded or ignored.** It is your job to find a home for all of them.
+--- CORE RULES & PARAMETERS ---
+{fact_mandate_placeholder}
 
-2.  **Self-Correction & Verification:** After creating your conceptual chunks, you must perform a final check. Review the original list of atomic facts and verify that every single one has been used. **If you find any leftover facts that could not be logically grouped, you MUST create new, separate cards for them**, even if it means creating a simple "What is X?" -> "X is Y." card.
+2.  **Self-Correction & Verification:** After creating your cards, you must perform a final check. Review the original list of facts and verify that every single one has been used. If you find any leftover facts, you **MUST** create new, separate cards for them.
 
-3.  **Context-Aware Chunking by Content Size:** Your absolute limits for the "Back" of a card are 200-800 characters. Within this range, you must dynamically select a target size based on the conceptual complexity of the grouped facts. Use about 100-250 characters for simpler concepts, use about 300-500 characters for the ideal chunking amount, and use 550-800 characters for concepts that are extensive and need to be thoroughly connected.
-You should strive to use the 300-500 character range most of the time. Save the 100-250 and 550-800 character lengths for situations and cards where you find it logically appropriate to use those ranges.
+3.  **Context-Aware Chunking:** The "Back" of a card should be between {min_chars} and {max_chars}, with an ideal target of {target_chars}.
 
-4.  **Question Generation (Front):** The "Front" must be a specific, 2nd or 3rd-order question that exhaustively prompts for the information on the "Back". Use varied question styles: "Explain the mechanism...", "Compare and contrast...", "A patient presents with...", or "Why is...".
+4.  **Question Generation (Front):** The "Front" must be a specific, 2nd or 3rd-order question that prompts for the information on the "Back". Use varied question styles: "Explain the mechanism...", "Compare and contrast...", "A patient presents with...".
 
-5.  **Vignette Answer Formatting:** If the 'Front' of the card is a clinical vignette (i.e. a 40 yo patient presents with...), then the 'Back' of the card must include an explicit statement that includes the name of the diagnosis.
-
-6.  **Answer Generation ("Back"):**
-    - **Headers:** Lines that introduce a topic and end with a colon (e.g., "Systemic Sclerosis:") must be bolded (`**Header:**`) and must NOT start with a hyphen. Add a blank line before new headers for visual separation.
+5.  **Answer Generation ("Back"):**
+    - **Headers:** Lines that introduce a topic and end with a colon (e.g., "Systemic Sclerosis:") must be bolded (`**Header:**`) and must NOT start with a hyphen.
     - **Lists:** All list items, including nested items, MUST begin with a hyphen (`- `).
-    - **Custom Tags:** You must use the following tags where appropriate: <pos>, <neg>, <ex>, <tip>.
+
+6.  **Semantic Tagging:** You must use the following tags to add semantic meaning to your answers:
+    - **`<pos>`...`</pos>`:** Use for definitional terms, key features, positive associations, or the "correct" answer in a comparison. (e.g., `- <pos>Rheumatoid Arthritis</pos> is an autoimmune disease...`)
+    - **`<neg>`...`</neg>`:** Use for contraindications, risks, negative associations, or the "incorrect" answer in a comparison. (e.g., `- It does <neg>not</neg> affect the DIP joints.`)
+    - **`<ex>`...`</ex>`:** Use to tag specific examples of a concept. (e.g., `- Examples of DMARDs include <ex>Methotrexate</ex>.`)
+    - **`<tip>`...`</tip>`:** Use for mnemonics, clinical pearls, or helpful learning tips. (e.g., `- <tip>Mnemonic: "SHIPP" for drug-induced lupus.</tip>`)
 
 7.  **Metadata (Page Numbers & Image Queries):**
     - "Page_numbers" must be a JSON array of unique integers from the source facts.
-    - You must provide two search queries:
-        - "Search_Query": A 2-5 word specific query ending in a type like "diagram", "micrograph", etc.
-        - "Simple_Search_Query": A 1-3 word query with only the most essential keywords.
+    - You must provide two search queries: "Search_Query" (specific, 2-5 words) and "Simple_Search_Query" (broad, 1-3 words).
 
-Example of a Perfect Function Call:
-
-{{
-  "name": "create_anki_card",
-  "args": {{
-    "Front": "Define coronary artery dominance and detail the course of the RCA and LAD.",
-    "Back": "- <pos>Coronary Dominance</pos> is determined by which artery gives rise to the <pos>PDA</pos>.\n- **Right Coronary Artery (RCA):** Supplies the <pos>right atrium</pos>.\n- **Left Anterior Descending (LAD):** Supplies the <pos>anterior 2/3 of the septum</pos>.",
-    "Page_numbers": [92, 93],
-    "Search_Query": "Coronary Arteries illustration",
-    "Simple_Search_Query": "Coronary Arteries"
-  }}
-}}
-
+{objectives_section}
 --- ATOMIC FACTS INPUT ---
 Based on all the rules above, process the following JSON data by calling the `create_anki_card` function for each conceptual card you create:
 {atomic_facts_json}
 """
 
 CLOZE_BUILDER_PROMPT = """
-Role: You are an expert in cognitive science creating single-deletion Anki cloze cards.
+Role: You are a simple data processing engine. Your task is to extract a single keyword from a sentence.
 
-Goal: You will convert EVERY atomic fact provided into its own flashcard by calling the `create_cloze_card` function.
+Goal: For each fact provided, you will call the `create_cloze_components` function. You will copy the fact verbatim and select one keyword from it.
 
-Core Rules:
-1.  **One Fact Per Card:** You must process every single fact from the input.
-2.  **Strategic Keyword Selection:** For each fact, identify the single MOST critical keyword to turn into a cloze deletion. Do not cloze common verbs or articles.
-3.  **Create the Cloze Sentence:** The `Sentence_HTML` field MUST contain the cloze deletion in the format `{{c1::keyword}}` or `{{c1::keyword::hint}}`.
-4.  **Maximize Context:** Enhance the sentence by bolding up to two other important contextual keywords using `<b>keyword</b>` tags. The cloze deletion should ideally be in the latter half of the sentence.
-5.  **Context Question:** The `Context_Question` should be a simple question that provides context for the cloze sentence.
-6.  **Image Queries:** You MUST generate two search queries:
-    - "Search_Query": A 2-4 word specific query ending in "diagram", "micrograph", etc.
-    - "Simple_Search_Query": A 1-3 word query with only the most essential keywords.
+{user_instructions}
 
-ATOMIC FACTS WITH PAGE NUMBERS:
-{atomic_facts_with_pages}
-"""
+--- CORE MANDATES ---
+1.  **COPY, DON'T REPHRASE:** This is your most important rule. The `Full_Sentence` you provide in your function call **MUST BE AN EXACT, VERBATIM COPY** of the original input fact. Do not change any words, add context, or rephrase the sentence in any way.
 
-CONCEPTUAL_CLOZE_BUILDER_PROMPT = """
-Role: You are an expert in cognitive science and medical education, tasked with creating high-yield, conceptually-linked Anki cloze cards.
+2.  **KEYWORD MUST MATCH:** The keyword you select for the `Cloze_Keywords` list **MUST BE AN EXACT SUBSTRING** that exists within the `Full_Sentence`.
 
-Primary Goal: Your primary goal is to convert EVERY atomic fact from the input into an Anki card by calling the `create_cloze_card` function. You will do this using a hybrid strategy: first, you will greedily identify and group related facts into conceptual multi-cloze cards. Any fact that cannot be grouped MUST be converted into its own atomic, single-cloze card.
+3.  **ONE FACT, ONE CARD:** You must process every single fact from the input and create a unique card for each one.
 
-Core Mandates:
-1.  **Exhaustive Processing:** You MUST ensure that every single fact from the input is used to create one card. No facts should be left behind. You must make multiple calls to the `create_cloze_card` function to cover all the facts.
-2.  **Prioritize Conceptual Grouping:** Your primary strategy is to find clusters of 2-5 related facts that describe a list, sequence, mechanism, or comparison (e.g., symptoms of a disease, steps in a pathway, features of related fungi). Synthesize these into a single, cohesive sentence.
-3.  **Fallback to Atomic Cards:** If a fact is isolated and cannot be logically grouped with others, you MUST process it individually as a single-cloze card.
-4.  **Cloze Deletion Rules:**
-    - For **conceptual groups**, use sequential cloze deletions (`{{c1::item 1}}`, `{{c2::item 2}}`, etc.) for each distinct piece of information.
-    - For **atomic cards**, use a single cloze deletion (`{{c1::critical keyword}}`).
-    - The keyword chosen for the cloze should be the most critical piece of information.
-5.  **Context and Formatting:** Enhance the sentence by bolding up to two other important contextual keywords using `<b>keyword</b>` tags. The `Context_Question` should be a simple question that prompts for the information in the sentence.
-6.  **Image Queries:** You MUST generate two search queries for every card:
-    - "Search_Query": A 2-4 word specific query ending in "diagram", "chart", "map", etc.
-    - "Simple_Search_Query": A 1-3 word query with only the most essential keywords.
+4.  **SIMPLE CONTEXT QUESTION:** The `Context_Question` should be a very simple question that the sentence answers. Often "What is X?" or "Define X."
 
---- Perfect Example of a Conceptual Cloze Card ---
+--- PERFECT EXAMPLE ---
+INPUT FACT (Page 9): The heart has four chambers.
+CORRECT OUTPUT:
 [
   {{
-    "name": "create_cloze_card",
+    "name": "create_cloze_components",
     "args": {{
-      "Context_Question": "What are the major endemic mycoses and their associated geographic locations in the Americas?",
-      "Sentence_HTML": "The major endemic mycoses include <b>dimorphic fungi</b> such as {{c1::Histoplasma}}, found in the Ohio/Mississippi River valleys; {{c2::Blastomyces}}, endemic to the Eastern/Central US; {{c3::Coccidioides}}, found in the Southwestern US; and {{c4::Paracoccidioides}}, endemic to <b>Latin America</b>.",
-      "Source_Page": "Page 15",
-      "Search_Query": "Endemic mycoses locations map",
-      "Simple_Search_Query": "Endemic mycoses map"
+      "Context_Question": "How many chambers does the human heart have?",
+      "Full_Sentence": "The heart has four chambers.",
+      "Cloze_Keywords": ["four chambers"],
+      "Source_Page": "Page 9",
+      "Search_Query": "Heart chambers diagram",
+      "Simple_Search_Query": "Heart chambers"
     }}
   }}
 ]
 ---
 
-Based on all the rules and the example above, process the following atomic facts:
-
+{objectives_section}
 ATOMIC FACTS WITH PAGE NUMBERS:
+{atomic_facts_with_pages}
+"""
+
+CONTEXTUAL_CLOZE_BUILDER_PROMPT = """
+Role: You are an expert medical educator. Your task is to synthesize related facts into a cohesive sentence and identify the key terms within it.
+
+Goal: You will group related facts and for each group, call the `create_cloze_components` function.
+
+{user_instructions}
+
+--- TASK WORKFLOW ---
+1.  **Identify a Logical Group:** Find a cluster of 2-5 related facts.
+2.  **Synthesize a Sentence:** Write a single, cohesive sentence that incorporates all information from the group.
+3.  **Identify Keywords:** From your new sentence, create a JSON list of the key terms that should be turned into cloze deletions.
+4.  **Call the Function:** Provide the full sentence and the list of keywords to the `create_cloze_components` function.
+
+--- CORE MANDATES ---
+1.  **Output Components Only:** You MUST NOT add cloze syntax like `{{c1::...}}` yourself. Your job is to provide the raw components.
+2.  **Exhaustive Processing:** Every single fact MUST be used.
+
+--- PERFECT EXAMPLE ---
+INPUT FACTS (Page 15): 
+- Histoplasma is found in the Ohio/Mississippi River valleys.
+- Blastomyces is endemic to the Eastern/Central US.
+CORRECT OUTPUT:
+[
+  {{
+    "name": "create_cloze_components",
+    "args": {{
+      "Context_Question": "What are the geographic locations of Histoplasma and Blastomyces?",
+      "Full_Sentence": "The endemic mycosis Histoplasma is found in the Ohio/Mississippi River valleys, whereas Blastomyces is endemic to the Eastern/Central US.",
+      "Cloze_Keywords": ["Histoplasma", "Blastomyces"],
+      "Source_Page": "Page 15",
+      "Search_Query": "Endemic mycoses map",
+      "Simple_Search_Query": "Mycoses map"
+    }}
+  }}
+]
+---
+
+{objectives_section}
+--- ATOMIC FACTS WITH PAGE NUMBERS ---
+Based on all the rules and the workflow above, process the following atomic facts:
 {atomic_facts_with_pages}
 """
 
@@ -191,4 +204,53 @@ The Krebs cycle is a series of chemical reactions... (a full page of text).
 
 --- CORRECT OUTPUT ---
 3, 5
+"""
+
+MERMAID_BUILDER_PROMPT = """
+Role: You are a data visualization expert creating interactive, "fill-in-the-blank" style diagrams for active recall learning using Mermaid.js.
+
+Goal: Convert a list of atomic facts into a structured JSON array of high-quality, conceptually-focused Anki cards by calling the `create_mermaid_card` function multiple times.
+
+{user_instructions}
+
+--- CRITICAL RULES ---
+1.  **Conceptual Chunking:** You MUST group related facts into small, logical "chunks" of 3-7 facts. Each chunk will become its own diagram.
+2.  **One Card Per Chunk:** You MUST call the `create_mermaid_card` function once for EACH conceptual chunk you identify. Do not create one giant diagram for all facts.
+{fact_mandate_placeholder}
+4.  **Two Diagram Versions:** For each card, you MUST provide two Mermaid code blocks:
+    - `Mermaid_Front_Code`: The diagram with 1-3 key nodes replaced with blanks like `[...]` or `?`.
+    - `Mermaid_Back_Code`: The complete, correct diagram.
+5.  **Question Generation:** The "Front" must be a question that asks the user to describe, draw, or explain the process shown in that specific, small diagram.
+
+--- Example of a Perfect Function Call ---
+{{
+  "name": "create_mermaid_card",
+  "args": {{
+    "Front": "Based on the diagram, describe the two main types of infections and provide an example for each.",
+    "Back": "A systemic infection spreads via blood/lymph (e.g., Disseminated TB), while a localized infection is contained (e.g., Pimples).",
+    "Mermaid_Front_Code": "graph TD; A[Systemic Infection] --> A1[...]; B[Localized Infection] --> B1[...];",
+    "Mermaid_Back_Code": "graph TD; A[Systemic Infection] --> A1[Pathogens Spread]; B[Localized Infection] --> B1[Pathogens Contained];",
+    "Page_numbers": [5],
+    "Search_Query": "Systemic vs Localized Infection diagram",
+    "Simple_Search_Query": "Infection Types"
+  }}
+}}
+
+{objectives_section}
+--- ATOMIC FACTS INPUT ---
+Based on all the rules above, process the following JSON data by calling the `create_mermaid_card` function for each conceptual diagram you create:
+{atomic_facts_json}
+"""
+
+OBJECTIVE_FINDER_PROMPT = """
+You are an expert document analyst. Your sole task is to find and extract the "Learning Objectives" section from the provided text.
+
+RULES:
+1.  Scan the text for a section explicitly titled "Learning Objectives", "Objectives", "Session Goals", or similar.
+2.  If you find such a section, return ONLY the clean text of the objectives, formatted as a numbered or bulleted list.
+3.  Do not add any other text, explanation, or apologies.
+4.  If no objectives section can be found, you MUST return the exact string "NO_OBJECTIVES_FOUND".
+
+--- DOCUMENT TEXT ---
+{full_text}
 """

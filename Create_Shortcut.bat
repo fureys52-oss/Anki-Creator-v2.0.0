@@ -1,39 +1,44 @@
 @echo off
-TITLE Create Anki Deck Generator Shortcut
+setlocal
 
-echo Creating a shortcut on your Desktop...
+:: --- Configuration ---
+set "SHORTCUT_NAME=Anki Deck Generator.lnk"
+set "ICON_NAME=icon.ico"
+set "TARGET_SCRIPT=run.bat"
+:: -------------------
 
-:: This file will contain the VBScript commands to create the shortcut
-set VBS_FILE=%TEMP%\CreateShortcut.vbs
+:: Get the directory where this script is located. This makes paths absolute and reliable.
+set "SCRIPT_DIR=%~dp0"
 
-:: This line gets the full path to the folder where this script is located
-:: This is CRITICAL for making the shortcut work from anywhere
-set SCRIPT_PATH=%~dp0
+:: Check if the icon file exists before proceeding.
+if not exist "%SCRIPT_DIR%%ICON_NAME%" (
+    echo.
+    echo ERROR: Icon file not found!
+    echo Please make sure your icon is in the main folder and named '%ICON_NAME%'.
+    echo.
+    pause
+    exit /b 1
+)
 
-:: Use echo to write VBScript commands into the temporary file
-echo Set WshShell = WScript.CreateObject("WScript.Shell") > %VBS_FILE%
-echo strDesktop = WshShell.SpecialFolders("Desktop") >> %VBS_FILE%
-echo Set oShellLink = WshShell.CreateShortcut(strDesktop ^& "\Anki Deck Generator.lnk") >> %VBS_FILE%
+echo Creating a desktop shortcut with a custom icon...
 
-:: Set the Target Path - what the shortcut will run
-echo oShellLink.TargetPath = "%SCRIPT_PATH%run.bat" >> %VBS_FILE%
+:: Use a single-line PowerShell command to prevent parsing errors by the batch interpreter.
+powershell.exe -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $sLinkFile = Join-Path -Path $ws.SpecialFolders('Desktop') -ChildPath '%SHORTCUT_NAME%'; $oLink = $ws.CreateShortcut($sLinkFile); $oLink.TargetPath = '%SCRIPT_DIR%%TARGET_SCRIPT%'; $oLink.WorkingDirectory = '%SCRIPT_DIR%'; $oLink.IconLocation = '%SCRIPT_DIR%%ICON_NAME%, 0'; $oLink.Description = 'Starts the Anki Deck Generator'; $oLink.Save()"
 
-:: Set the Working Directory - where the script will run from
-echo oShellLink.WorkingDirectory = "%SCRIPT_PATH%" >> %VBS_FILE%
+:: Check if the PowerShell command was successful
+if %errorlevel% neq 0 (
+    echo.
+    echo ERROR: The shortcut could not be created.
+    echo This might be due to security policies on your system preventing PowerShell from running.
+    echo Please try running this script as an Administrator.
+    echo.
+) else (
+    echo.
+    echo ==========================================================
+    echo  Shortcut created successfully on your Desktop!
+    echo  It has been configured with the custom '%ICON_NAME%' icon.
+    echo ==========================================================
+    echo.
+)
 
-:: Set the Icon for the shortcut (we can use the cmd icon or point to a custom .ico if you have one)
-echo oShellLink.IconLocation = "%SystemRoot%\System32\cmd.exe,0" >> %VBS_FILE%
-
-:: Save the shortcut file
-echo oShellLink.Save >> %VBS_FILE%
-
-:: Execute the VBScript file using cscript, which prevents any windows from popping up
-cscript //nologo %VBS_FILE%
-
-:: Clean up the temporary VBScript file
-del %VBS_FILE%
-
-echo.
-echo Shortcut created successfully on your Desktop!
-echo.
 pause

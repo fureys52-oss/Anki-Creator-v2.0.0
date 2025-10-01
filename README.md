@@ -1,97 +1,74 @@
 Youtube Tutorial Link: 
 https://www.youtube.com/watch?v=Y-DRC4Ei6E4
 
-Table of Contents
-Key Features
-
-Installation & Setup (Script-based)
-
-How to Use the Application
-
-Decks & Files Tab
-
-Core Settings Panel
-
-Running the Generator
-
-Advanced Usage (Prompts Tab)
-
-Troubleshooting
-
-Key Features
-Intelligent Content Curation: An initial AI pass reads your entire document to identify and discard superfluous pages (like title pages, references, or acknowledgements), ensuring your flashcards are based only on core, examinable content.
-
-Multiple Card Formats: Choose between three powerful generation modes:
-
-Conceptual (Basic Cards): Creates traditional question-and-answer cards by synthesizing related facts.
-
-Atomic Cloze: Creates one targeted cloze (fill-in-the-blank) card for every single fact.
-
-Conceptual Cloze (Hybrid): The most advanced mode. It groups related facts into complex, multi-cloze sentences and creates atomic cards for any facts left over, guaranteeing comprehensive coverage.
-
-AI-Validated Image Sourcing: Automatically finds and attaches relevant images to your cards. It first searches the source PDF, validating images with an AI vision model, and then falls back to searching external medical and creative commons databases if needed.
-
-Fully Customizable: Advanced users can directly edit the AI prompts that control every step of the generation process, allowing for infinite customization of the output style.
-
-
-Installation & Setup 
-Follow these steps to get the application running on your Windows machine from the source scripts.
-
+Installation & Setup (Windows & macOS)
+Follow these steps to get the application running on your computer.
 Step 1: Install External Dependencies
 You need a few key programs installed on your system first.
-
 1A. Install Python
-
-Download: Get Python 3.9 or newer from https://www.python.org/downloads/.
-
-Install: Run the installer. CRITICAL: On the first screen of the installer, make sure to check the box that says "Add Python to PATH".
-
-1B. Install Anki & AnkiConnect
-
-Anki: Get the latest version from https://apps.ankiweb.net/ and install it.
-
+On Windows:
+Download: Get Python 3.9 or newer from python.org.
+Install: Run the installer. CRITICAL: On the first screen of the installer, you must check the box that says "Add Python to PATH".
+On macOS:
+Install Homebrew: If you don't have it, open the Terminal app and install the Homebrew package manager from brew.sh.
+Install Python: In your Terminal, run the command: brew install python3
+1B. Install Anki & AnkiConnect (Universal)
+Anki: Get the latest version from apps.ankiweb.net and install it.
 AnkiConnect: Open Anki, go to Tools > Add-ons, click "Get Add-ons..." and paste in the code: 2055492159. Restart Anki when prompted.
-
 1C. Install Tesseract OCR Engine
+On Windows:
+Download: Get the installer from the official source: Tesseract at UB Mannheim.
+Install: Run the installer. It is recommended to keep the default installation path.
+On macOS:
+In your Terminal, run the command: brew install tesseract
 
-Download: Get the installer from the official source: https://github.com/UB-Mannheim/tesseract/wiki.
+Step 2: Download and Prepare the Project
+Download: Click the green <> Code button at the top of the GitHub page and select "Download ZIP".
+Extract: Extract the .zip file to a permanent folder on your computer (e.g., C:\AnkiGenerator or /Users/YourName/AnkiGenerator).
 
-Install: Run the installer. CRITICAL: During installation, ensure you select the languages you need (at a minimum, "English" and "OSD").
-When you install tesseract, please install it specifically to this file location. This is already the default, but it is key: C:\Program Files\Tesseract-OCR
+Step 3: Run the Setup Script
+This one-time step creates a local Python environment and installs all required libraries.
+On Windows:
+In the project folder, double-click the setup.bat file. Wait for the command prompt window to finish and close.
+On macOS:
+First-Time Setup (Permissions): Before you can run the scripts, you must give them permission. This is a one-time setup step.
+Open the Terminal app (you can find it in Applications/Utilities).
+Type cd (the letters c and d, followed by a space). Do not press Enter yet.
+Locate your project folder in Finder.
+Drag the project folder from Finder and drop it directly onto the Terminal window. The path to the folder will be automatically typed for you.
+Now, click on the Terminal window and press Enter. Your terminal prompt should now show the name of the project folder.
+Finally, copy and paste the following command into the Terminal and press Enter:
+code
+Sh
+chmod +x setup.command run.command create_shortcut.command
+Run Setup: Now that permissions are set, you can close the Terminal. In Finder, double-click the setup.command file.
 
-Step 2: Download and Set Up the Project Files - Click the <>Code button in the top right, then click "Download ZIP"
-
-Download & Extract: Download the project .zip file and extract it to a permanent folder on your computer (e.g., C:\AnkiGenerator). This folder should contain setup.bat, run.bat, and other project files.
-
-Run the Setup Script: In the project folder, double-click the setup.bat file. This will create a local Python environment and install all the required libraries automatically. Wait for it to complete.
-
-Step 3: Configure Your API Key
-Rename the Template: In the project folder, find the file named .env.template and rename it to .env.
-
-1. Go to aistudio.google.com
-2. Click Get API KEY on the bottom left
-3. Click Create API Key on the top right in the new screen
-4. Create a new project, name it whatever you want.
-5. Name your key whatever you like, and press create key.
-6. A new API key will pop up at the top of the same window.
-7. Click 'copy API key' on the right hand side of that box.
-
-Edit the .env File:
-
-Open the newly renamed .env file with a text editor (like Notepad).
-
+Step 4: Configure Your API Key (Universal)
+Go to aistudio.google.com and get your API Key.
+In the project folder, find the file named .env.template and rename it to .env.
+Open the new .env file with a text editor (like Notepad or TextEdit).
 Replace YOUR_API_KEY_HERE with the key you copied from the Google AI Studio website.
-
 Save and close the file.
 
-Step 4: Run the Application!
+Step 5: Run the Application!
 IMPORTANT: Make sure the main Anki application is open and running on your desktop.
+On Windows: Double-click the run.bat file.
+On macOS: Double-click the run.command file.
+A terminal or command prompt window will appear, and your web browser will open with the application's interface.
 
-In the project folder, double-click the run.bat file.
+Step 6: Create a Desktop Shortcut (Optional)
+On Windows:
+Place your desired icon in the main project folder and rename it to icon.ico.
+Double-click Create_Shortcut.bat. This will automatically place a shortcut on your Desktop with your custom icon.
+On macOS:
+Double-click create_shortcut.command to place a shortcut on your Desktop.
+To apply a custom icon, follow the manual steps:
+Open your icon file (.ico, .png, etc.) in the Preview app.
+Press Cmd+A (Select All), then Cmd+C (Copy).
+Right-click the shortcut on your Desktop and choose "Get Info".
+Click the small icon in the top-left of the "Get Info" window (it will get a blue highlight).
+Press Cmd+V (Paste). The icon will be replaced.
 
-A command prompt window will appear, followed shortly by your default web browser, which will open a new tab with the application's interface.
-
-If you want to have a desktop shortcut, also run create_shortcut.bat
 
 
 

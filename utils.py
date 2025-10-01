@@ -9,6 +9,8 @@ from typing import Dict, Tuple, List, Any
 from dotenv import load_dotenv
 import gradio as gr
 import pytesseract
+import sys
+import json
 
 # --- File and Cache Management ---
 def manage_log_files(log_dir: Path, max_logs: int):
@@ -34,24 +36,32 @@ def clear_cache(pdf_cache_dir: Path, ai_cache_dir: Path) -> str:
 
 def configure_tesseract():
     """
-    Checks if Tesseract is in the system PATH and, if not, checks the
-    default Windows installation path and configures pytesseract accordingly.
-    Returns True if Tesseract is successfully configured, False otherwise.
+    Checks for Tesseract in PATH, then checks common installation paths
+    for Windows and macOS. Returns True if configured, False otherwise.
     """
-    # Check if Tesseract is already accessible via the system's PATH
     if shutil.which("tesseract"):
         print("Tesseract executable found in system PATH.")
         return True
 
-    # If not in PATH, check the default Windows installation directory
-    windows_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if os.path.exists(windows_path):
-        print(f"Tesseract not in PATH, but found at default location: {windows_path}")
-        # Explicitly tell the pytesseract library where to find the executable
-        pytesseract.pytesseract.tesseract_cmd = windows_path
-        return True
+    # Platform-specific checks
+    if sys.platform == "win32":
+        windows_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+        if os.path.exists(windows_path):
+            print(f"Tesseract found at default Windows location: {windows_path}")
+            pytesseract.pytesseract.tesseract_cmd = windows_path
+            return True
+    elif sys.platform == "darwin": # macOS
+        # Common paths for Homebrew installations
+        paths_to_check = [
+            "/usr/local/bin/tesseract",      # Intel Macs
+            "/opt/homebrew/bin/tesseract"    # Apple Silicon Macs
+        ]
+        for path in paths_to_check:
+            if os.path.exists(path):
+                print(f"Tesseract found at default macOS location: {path}")
+                pytesseract.pytesseract.tesseract_cmd = path
+                return True
 
-    # If it's not found in either place, OCR cannot proceed.
     print("Tesseract executable not found in PATH or default installation directory.")
     return False
 
@@ -153,3 +163,25 @@ def is_superfluous(text: str) -> bool:
         return True
 
     return False
+SETTINGS_FILE = Path("settings.json")
+
+def save_settings(settings_dict: dict):
+    """Saves the provided dictionary of settings to settings.json."""
+    try:
+        with SETTINGS_FILE.open('w', encoding='utf-8') as f:
+            json.dump(settings_dict, f, indent=4)
+        print(f"Settings saved successfully to {SETTINGS_FILE}")
+    except Exception as e:
+        print(f"Error saving settings: {e}")
+
+def load_settings() -> dict:
+    """Loads settings from settings.json if it exists."""
+    if SETTINGS_FILE.exists():
+        try:
+            with SETTINGS_FILE.open('r', encoding='utf-8') as f:
+                print(f"Loading settings from {SETTINGS_FILE}")
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            # If the file is corrupt or unreadable, return empty and let defaults take over.
+            return {}
+    return {}

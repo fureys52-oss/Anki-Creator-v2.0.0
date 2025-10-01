@@ -3,8 +3,10 @@ https://www.youtube.com/watch?v=Y-DRC4Ei6E4
 
 Installation & Setup (Windows & macOS)
 Follow these steps to get the application running on your computer.
+
 Step 1: Install External Dependencies
 You need a few key programs installed on your system first.
+
 1A. Install Python
 On Windows:
 Download: Get Python 3.9 or newer from python.org.

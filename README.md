@@ -13,7 +13,7 @@ Download: Get Python 3.9 or newer from python.org.
 Install: Run the installer. CRITICAL: On the first screen of the installer, you must check the box that says "Add Python to PATH".
 On macOS:
 Install Homebrew: If you don't have it, open the Terminal app and install the Homebrew package manager from brew.sh.
-Install Python: In your Terminal, run the command: brew install python3
+Install Python: In your Terminal, run the command: brew update && brew install python3
 
 1B. Install Anki & AnkiConnect (Universal)
 - Anki: Get the latest version from apps.ankiweb.net and install it.

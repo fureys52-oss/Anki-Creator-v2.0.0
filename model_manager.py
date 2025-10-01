@@ -10,9 +10,12 @@ KNOWN_MODELS = [
     {"name": "gemini-1.5-pro", "role": "pro", "quality_rank": 4}, # Kept for future-proofing
 
     # Flash Models (for high-volume extraction)
+    # The model manager sorts by RPM, then RPD.
+    # gemini-2.0-flash-lite (30 RPM) is not on the old list and is a great addition.
+    {"name": "gemini-2.0-flash-lite", "role": "flash", "rpm": 30, "rpd": 200},
     {"name": "gemini-2.5-flash-lite", "role": "flash", "rpm": 15, "rpd": 1000},
+    {"name": "gemini-2.0-flash", "role": "flash", "rpm": 15, "rpd": 200}, # Renamed from gemini-2.0-flash-001 for clarity
     {"name": "gemini-2.5-flash", "role": "flash", "rpm": 10, "rpd": 250},
-    {"name": "gemini-2.0-flash-001", "role": "flash", "rpm": 15, "rpd": 200},
 ]
 
 class GeminiModelManager:

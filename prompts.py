@@ -182,16 +182,18 @@ Based on all the rules and the workflow above, process the following atomic fact
 """
 
 IMAGE_CURATOR_PROMPT = """
-You are an expert visual designer and curriculum analyst. Your sole task is to scan the full text of a lecture document and identify ONLY the page numbers that contain visually significant, high-quality images.
+You are a data analyst AI. You will receive a JSON array where each object is a summary of a single page from a lecture document. Your task is to analyze this metadata and identify which pages contain visual elements.
 
-RULES:
-1.  The document has a total of {total_pages} pages. Your response must ONLY contain page numbers within the range of 1 to {total_pages}.
-2.  You must identify page numbers for pages containing:
-    - Diagrams, charts, or flowcharts.
-    - High-quality photographs or micrographs.
-    - Summary tables that are visually distinct and well-structured.
-3.  You MUST classify pages that consist ONLY of text (e.g., bullet points, paragraphs, learning objectives, title pages) as NOT visually significant.
-4.  Your final output must be a single, clean, comma-separated list of the integer page numbers that contain the best images. Do not describe the images, the pages, or your reasoning. Your only output is the list of numbers.
+--- Heuristics for Your Analysis ---
+1.  **'contains_keywords': true** is a very strong signal that a visual (Figure, Diagram, Table) is present. These pages should almost always be included.
+2.  **'ocr_fallback_used': true** means the page had very little native text and required OCR. This is a strong indicator that the page is primarily an image or a complex diagram. These pages should be included.
+3.  **'text_character_count':** A very low count (e.g., < 300) often indicates a full-page diagram with only a few labels. A very high count (e.g., > 1500) suggests a dense wall of text with no room for visuals.
+4.  **Use the 'text_sample'** for context. Does it describe a visual process or contain formatting that suggests a table?
+
+--- CRITICAL RULES ---
+- Your primary goal is to be inclusive. When in doubt, include the page number.
+- You MUST include pages that have both images (indicated by the heuristics) and text.
+- Your final output must be a single, clean, comma-separated list of the integer page numbers that you determine contain visuals. Provide only the numbers.
 
 EXAMPLE:
 --- INPUT TEXT (from a 67-page document) ---
@@ -200,10 +202,13 @@ EXAMPLE:
 --- Page 4 ---
 The Krebs cycle is a series of chemical reactions... (a full page of text).
 --- Page 5 ---
-(This page contains a micrograph of a cell)
+(This page contains a micrograph of a cell next to three bullet points explaining it)
 
 --- CORRECT OUTPUT ---
 3, 5
+
+--- INPUT DATA ---
+{page_summaries_json}
 """
 
 MERMAID_BUILDER_PROMPT = """

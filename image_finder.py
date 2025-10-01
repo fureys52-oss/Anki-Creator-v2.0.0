@@ -4,6 +4,7 @@ import io
 import base64
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple
+import numpy as np
 
 import fitz  # PyMuPDF, used for robust image handling
 import requests
@@ -174,7 +175,7 @@ class PDFImageSource(ImageSource):
         for item in image_list:
             score_vs_query = self._get_image_text_similarity(item["image_bytes"], query_text, clip_model)
             score_vs_context = self._get_image_text_similarity(item["image_bytes"], item["context_text"], clip_model)
-            final_score = max(score_vs_query, score_vs_context)
+            final_score = (0.7 * score_vs_query) + (0.3 * score_vs_context)
             if final_score > self.similarity_threshold and final_score > highest_score:
                 highest_score = final_score
                 best_match = item
@@ -198,6 +199,10 @@ class PDFImageSource(ImageSource):
                     if min(width, height) > 0:
                         aspect_ratio = max(width, height) / min(width, height)
                         if aspect_ratio > 8.0: continue
+                    np_img = np.array(img.convert("L"))
+                    if np_img.var() < 100: # Threshold can be tuned, but 100 is good for solid colors
+                        print(f"[Image Extractor] Discarding low-variance image (likely a drop shadow or background) on page {page.number + 1}.")
+                        continue
                     img_rect = page.get_image_bbox(img_info)
                     context_text = self._find_context_for_image(img_rect, page)
                     if context_text:
@@ -412,22 +417,29 @@ class ImageFinder:
             return None
 
     # --- MODIFIED: Implements new tiered search logic ---
-    def find_best_image(self, query_texts: List[str], clip_model: SentenceTransformer, pdf_path: Optional[str] = None, focused_search_pages: Optional[List[int]] = None, expanded_search_pages: Optional[List[int]] = None, **kwargs) -> Optional[str]:
+    def find_best_image(self, query_texts: List[str], clip_model: SentenceTransformer, pdf_path: Optional[str] = None, focused_search_pages: Optional[List[int]] = None, expanded_search_pages: Optional[List[int]] = None, full_source_page_numbers: Optional[List[int]] = None, **kwargs) -> Optional[str]:
         
         pdf_strategy = next((s for s in self.strategies if isinstance(s, PDFImageSource)), None)
 
         if pdf_strategy:
-            # TIER 1: FOCUSED PDF SEARCH (Exact pages from the card)
+            # TIER 1: FOCUSED PDF SEARCH (Curated pages that are also source pages)
             if focused_search_pages:
                 print(f"\n--- Tier 1: Trying {pdf_strategy.name} (Focused Search on pages {focused_search_pages}) ---")
                 best_result = self._run_search_for_strategy(pdf_strategy, query_texts, clip_model, pdf_path, focused_search_pages, **kwargs)
                 if best_result.get("image_bytes"):
                     return self._finalize_image(best_result)
 
-            # TIER 2: EXPANDED PDF SEARCH (Nearby pages as a fallback)
+            # TIER 2: EXPANDED PDF SEARCH (Curated pages near the source pages)
             if expanded_search_pages:
                 print(f"\n--- Tier 2: Trying {pdf_strategy.name} (Expanded Search on pages {expanded_search_pages}) ---")
                 best_result = self._run_search_for_strategy(pdf_strategy, query_texts, clip_model, pdf_path, expanded_search_pages, **kwargs)
+                if best_result.get("image_bytes"):
+                    return self._finalize_image(best_result)
+
+            # TIER 2.5: UNFILTERED PDF SEARCH (Safety Net: All source pages, ignoring curation)
+            if full_source_page_numbers:
+                print(f"\n--- Tier 2.5: Curated PDF search failed. Trying Unfiltered Search on all source pages {full_source_page_numbers}... ---")
+                best_result = self._run_search_for_strategy(pdf_strategy, query_texts, clip_model, pdf_path, full_source_page_numbers, **kwargs)
                 if best_result.get("image_bytes"):
                     return self._finalize_image(best_result)
 

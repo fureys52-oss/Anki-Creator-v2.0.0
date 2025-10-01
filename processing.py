@@ -490,7 +490,7 @@ class DeckProcessor:
             return self.full_text
 
     def _curate_image_pages(self) -> List[int]:
-        self.log("\n--- AI Pass 0.5: Curating visually significant pages for image search ---")
+        self.log("\n--- AI Pass 0.5: Generating page summaries for visual curation ---")
         
         all_page_nums = [int(p) for p in re.findall(r'--- Page (\d+) ---', self.full_text)]
         if not all_page_nums:
@@ -498,27 +498,55 @@ class DeckProcessor:
             return []
         total_pages = max(all_page_nums)
 
-        prompt = self.prompts_dict['image_curator'].format(total_pages=total_pages)
-        response = call_gemini(prompt + "\n\n--- TEXT ---\n" + self.full_text, self.api_keys["GEMINI_API_KEY"], model_name=self.flash_model, task_id="curate_images")
+        # --- NEW: Pre-processing logic ---
+        page_summaries = []
+        page_pattern = re.compile(r'--- Page (\d+) ---\n(.*?)(?=--- Page \d+ ---|\Z)', re.DOTALL)
+        visual_keywords = re.compile(r'\b(figure|fig|diagram|table|chart|graph|map|image)\b', re.IGNORECASE)
 
-        if "API_" in str(response) or not response:
+        for match in page_pattern.finditer(self.full_text):
+            page_num = int(match.group(1))
+            content = match.group(2).strip()
+            
+            summary = {
+                "page_number": page_num,
+                "text_character_count": len(content),
+                "ocr_fallback_used": "OCR SUCCESS" in content or "OCR FAILED" in content,
+                "contains_keywords": bool(visual_keywords.search(content)),
+                "text_sample": content[:200].replace('\n', ' ') + "..."
+            }
+            page_summaries.append(summary)
+        
+        page_summaries_json = json.dumps(page_summaries, indent=2)
+        # --- END of new logic ---
+
+        prompt = self.prompts_dict['image_curator'].format(total_pages=total_pages, page_summaries_json=page_summaries_json)
+        
+        # We no longer need to send the full text, just the prompt with the JSON summary
+        response = call_gemini(prompt, self.api_keys["GEMINI_API_KEY"], model_name=self.flash_model, task_id="curate_images")
+
+        if not response or "API_" in str(response):
             self.log("   > WARNING: AI image curation failed. Image search will consider all pages.")
             return all_page_nums
+
         try:
             page_numbers_str = re.findall(r'\d+', response)
-            if not page_numbers_str: raise ValueError("No numbers found.")
+            if not page_numbers_str: raise ValueError("No numbers found in AI response.")
 
             pages_to_keep = [p for p in {int(p) for p in page_numbers_str} if 1 <= p <= total_pages]
             
             invalid_pages_found = len(page_numbers_str) - len(pages_to_keep)
             if invalid_pages_found > 0:
                 self.log(f"   > Image Curator sanity check: Discarded {invalid_pages_found} invalid page numbers.")
+            
+            if not pages_to_keep:
+                self.log("   > WARNING: AI image curation resulted in no pages. Using all pages for safety.")
+                return all_page_nums
 
             self.log(f"   > Image Curation successful. Prioritizing {len(pages_to_keep)} pages for image search.")
             return sorted(pages_to_keep)
             
         except (ValueError, TypeError):
-            self.log("   > WARNING: Could not parse image curator response. Image search will consider all pages.")
+            self.log("   > WARNING: Could not parse image curator response. Using all pages for safety.")
             return all_page_nums
 
     def _setup_anki(self):
@@ -787,7 +815,7 @@ class DeckProcessor:
                     max_page = max(full_source_page_numbers) if full_source_page_numbers else 0
                     expanded_range = set(range(max(1, min_page - 1), max_page + 2))
                     expanded_pages = [p for p in expanded_range if p in self.curated_image_pages]
-                    image_html = self.image_finder.find_best_image(query_texts=search_queries, clip_model=self.clip_model, pdf_path=main_pdf_path, pdf_images_cache=self.pdf_images_cache, focused_search_pages=focused_pages, expanded_search_pages=expanded_pages)
+                    image_html = self.image_finder.find_best_image(query_texts=search_queries, clip_model=self.clip_model, pdf_path=main_pdf_path, pdf_images_cache=self.pdf_images_cache, focused_search_pages=focused_pages, expanded_search_pages=expanded_pages, full_source_page_numbers=full_source_page_numbers)
 
                 page_str = f"Pgs {', '.join(map(str, sorted(list(set(full_source_page_numbers)))))}"
                 source_text = f"{Path(main_pdf_path).stem} - {page_str}"

@@ -47,3 +47,5 @@ markdown2
 
 # Used to load API keys and other secrets from the .env file
 python-dotenv
+
+numpy

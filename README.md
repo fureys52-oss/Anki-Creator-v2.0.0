@@ -14,7 +14,7 @@ On Windows:
 - Install: Run the installer. CRITICAL: On the first screen of the installer, you must check the box that says "Add Python to PATH".
 
 On macOS:
-- Open the Terminal app (found in applications/utilities) and run the following command:  xcode-select --install
+- Open the Terminal app (found in applications/utilities or press command + Space and type terminal) and run the following command:  xcode-select --install
 - Install Homebrew: If you don't have it, open the Terminal app and install the Homebrew package manager from brew.sh (its a website)
 - Install Python: In your Terminal, run the command:   brew update && brew install python3
 

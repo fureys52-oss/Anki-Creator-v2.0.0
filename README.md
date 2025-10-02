@@ -58,6 +58,7 @@ Step 4: Configure Your API Key (Universal)
 - On macOS: 
   - Open the Terminal, navigate to the project folder (using the cd and drag-and-drop trick from Step 3), and run the command:   cp env.template .env
     if that command didn't work, try: mv env.template .env
+    Note: Your .env file might be invisible. Try "Command + Shift + . " to make it visible in the folder.
   - Open the new .env file with a text editor (like Notepad or TextEdit), paste your API key, and save.
 
 Step 5: Run the Application!

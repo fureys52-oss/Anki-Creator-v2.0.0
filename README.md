@@ -45,6 +45,7 @@ Step 3: Run the Setup Script
   - 4 Press Enter.
   - 5 Copy and paste the following command, then press Enter:
   chmod +x setup.command run.command create_shortcut.command
+(if that command didnt work, try: sudo setup.command)
   - 6 Run setup.command in your project folder by double cicking it.
 
 Step 4: Configure Your API Key (Universal)
@@ -55,7 +56,8 @@ Step 4: Configure Your API Key (Universal)
   - Replace YOUR_API_KEY_HERE with the key you copied from the Google AI Studio website.
   - Save and close the file.
 - On macOS: 
-  - Open the Terminal, navigate to the project folder (using the cd and drag-and-drop trick from Step 3), and run the command:   cp .env.template .env
+  - Open the Terminal, navigate to the project folder (using the cd and drag-and-drop trick from Step 3), and run the command:   cp env.template .env
+    if that command didn't work, try: mv env.template .env
   - Open the new .env file with a text editor (like Notepad or TextEdit), paste your API key, and save.
 
 Step 5: Run the Application!

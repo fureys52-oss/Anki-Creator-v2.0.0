@@ -8,12 +8,15 @@ Step 1: Install External Dependencies
 You need a few key programs installed on your system first.
 
 1A. Install Python
+
 On Windows:
-Download: Get Python 3.9 or newer from python.org.
-Install: Run the installer. CRITICAL: On the first screen of the installer, you must check the box that says "Add Python to PATH".
+- Download: Get Python 3.9 or newer from python.org. 
+- Install: Run the installer. CRITICAL: On the first screen of the installer, you must check the box that says "Add Python to PATH".
+
 On macOS:
-Install Homebrew: If you don't have it, open the Terminal app and install the Homebrew package manager from brew.sh.
-Install Python: In your Terminal, run the command: brew update && brew install python3
+- Open the Terminal app (found in applications/utilities or press command + Space and type terminal) and run the following command:  xcode-select --install
+- Install Homebrew: If you don't have it, open the Terminal app and install the Homebrew package manager from brew.sh (its a website)
+- Install Python: In your Terminal, run the command:   brew update && brew install python3
 
 1B. Install Anki & AnkiConnect (Universal)
 - Anki: Get the latest version from apps.ankiweb.net and install it.
@@ -21,75 +24,77 @@ Install Python: In your Terminal, run the command: brew update && brew install p
 
 1C. Install Tesseract OCR Engine
 - On Windows:
-Download: Get the installer from the official source: Tesseract at UB Mannheim.
-Install: Run the installer. It is recommended to keep the default installation path.
+  - Download: Get the installer from the official source: Tesseract at UB Mannheim.
+  - Install: Run the installer. It is recommended to keep the default installation path.
 - On macOS:
-In your Terminal, run the command: brew install tesseract
+  - In your Terminal, run the command:   brew install tesseract
 
 Step 2: Download and Prepare the Project
-Download: Click the green <> Code button at the top of the GitHub page and select "Download ZIP".
-Extract: Extract the .zip file to a permanent folder on your computer (e.g., C:\AnkiGenerator or /Users/YourName/AnkiGenerator).
+- Download: Click the green <> Code button at the top of the GitHub page and select "Download ZIP".
+- Extract: Extract the .zip file to a permanent folder on your computer (e.g., C:\AnkiGenerator or /Users/YourName/AnkiGenerator).
 
 Step 3: Run the Setup Script
-This one-time step creates a local Python environment and installs all required libraries.
+- This one-time step creates a local Python environment and installs all required libraries.
+- On Windows:
+  - In the project folder, double-click the setup.bat file. Wait for the command prompt window to finish and close.
 
-On Windows:
-In the project folder, double-click the setup.bat file. Wait for the command prompt window to finish and close.
-
-On macOS:
-1 Open the Terminal app.
-2 Type cd (the letters c and d, followed by a space).
-3 Drag your project folder from Finder and drop it onto the Terminal window.
-4 Press Enter.
-5 Copy and paste the following command, then press Enter:
-chmod +x setup.command run.command create_shortcut.command
-6 Run setup.command in your project folder by double cicking it.
+- On macOS:
+  - 1 Open the Terminal app.
+  - 2 Type cd (the letters c and d, followed by a space).
+  - 3 Drag your project folder from Finder and drop it onto the Terminal window.
+  - 4 Press Enter.
+  - 5 Copy and paste the following command, then press Enter:
+  chmod +x setup.command run.command create_shortcut.command
+(if that command didnt work, try: sudo setup.command)
+  - 6 Run setup.command in your project folder by double cicking it.
 
 Step 4: Configure Your API Key (Universal)
-Go to aistudio.google.com and get your API Key. Just click th get api key button at the bottom left.
-On Windows: 
-In the project folder, find the file named .env.template and rename it to .env.
-Open the new .env file with a text editor (like Notepad or TextEdit).
-Replace YOUR_API_KEY_HERE with the key you copied from the Google AI Studio website.
-Save and close the file.
-On macOS: 
-Open the Terminal, navigate to the project folder (using the cd and drag-and-drop trick from Step 3), and run the command: cp .env.template .env
-Open the new .env file with a text editor (like Notepad or TextEdit), paste your API key, and save.
+- Go to aistudio.google.com and get your API Key. Just click th get api key button at the bottom left.
+- On Windows: 
+  - In the project folder, find the file named .env.template and rename it to .env.
+  - Open the new .env file with a text editor (like Notepad or TextEdit).
+  - Replace YOUR_API_KEY_HERE with the key you copied from the Google AI Studio website.
+  - Save and close the file.
+- On macOS: 
+  - Open the Terminal, navigate to the project folder (using the cd and drag-and-drop trick from Step 3), and run the command:   cp env.template .env
+    if that command didn't work, try: mv env.template .env
+    Note: Your .env file might be invisible. Try "Command + Shift + . " to make it visible in the folder.
+  - Open the new .env file with a text editor (like Notepad or TextEdit), paste your API key, and save.
 
 Step 5: Run the Application!
-IMPORTANT: Make sure the main Anki application is open and running on your desktop.
-On Windows: Double-click the run.bat file.
-On macOS: Double-click the run.command file.
+- IMPORTANT: Make sure the main Anki application is open and running on your desktop.
+- On Windows: Double-click the run.bat file.
+- On macOS: Double-click the run.command file.
 A terminal or command prompt window will appear, and your web browser will open with the application's interface.
 
 Step 6: Create a Desktop Shortcut (Optional)
-On Windows:
-Place your desired icon in the main project folder and rename it to icon.ico.
-Double-click Create_Shortcut.bat. This will automatically place a shortcut on your Desktop with your custom icon.
-On macOS:
-Double-click create_shortcut.command to place a shortcut on your Desktop.
-To apply a custom icon, follow the manual steps:
-Open your icon file (.ico, .png, etc.) in the Preview app.
-Press Cmd+A (Select All), then Cmd+C (Copy).
-Right-click the shortcut on your Desktop and choose "Get Info".
-Click the small icon in the top-left of the "Get Info" window (it will get a blue highlight).
-Press Cmd+V (Paste). The icon will be replaced.
+- On Windows:
+  - Place your desired icon in the main project folder and rename it to icon.ico.
+  - Double-click Create_Shortcut.bat. This will automatically place a shortcut on your Desktop with your custom icon.
+- On macOS:
+  - Double-click create_shortcut.command to place a shortcut on your Desktop.
+  - To apply a custom icon, follow the manual steps:
+  - Open your icon file (.ico, .png, etc.) in the Preview app.
+  - Press Cmd+A (Select All), then Cmd+C (Copy).
+  - Right-click the shortcut on your Desktop and choose "Get Info".
+  - Click the small icon in the top-left of the "Get Info" window (it will get a blue highlight).
+  - Press Cmd+V (Paste). The icon will be replaced.
 
 
 
 
 
 How to Use the Application
-The interface is divided into a few key areas.
+- The interface is divided into a few key areas.
 
-1. Decks & Files Tab
+-  1. Decks & Files Tab
 This is where you start.
 
 Upload PDFs: Click the "Upload PDFs" box and select one or more PDF files you want to turn into flashcards.
 
 Automatic Deck Creation: The application will automatically create a separate "Deck" accordion for each PDF you upload. It intelligently guesses a deck title (e.g., "L01 - Introduction to Biology") based on the PDF's filename. You can edit this title at any time.
 
-2. Core Settings Panel
+- 2. Core Settings Panel
 This panel on the right controls the main generation options.
 
 Card Type:
@@ -118,7 +123,7 @@ Add any Anki tags you want applied to all generated cards, separated by commas (
 
 
 
-3. Running the Generator
+- 3. Running the Generator
 Generate All Decks: Once your PDFs are uploaded and settings are configured, click this button to start the process.
 
 Session Log: This text box provides a real-time log of the entire process, from PDF processing to AI calls and adding notes to Anki. It is invaluable for understanding what the program is doing.

@@ -66,23 +66,33 @@ def configure_tesseract():
     return False
 
 # --- Configuration and API Keys ---
-def get_api_keys_from_env() -> Dict[str, str]:
+def get_api_keys(ui_keys: Dict[str, str]) -> Dict[str, str]:
+    """
+    Gets API keys, prioritizing keys entered in the UI over keys in a .env file.
+    """
+    # Load keys from .env file as a fallback
     script_dir = Path(__file__).resolve().parent
     env_path = script_dir / '.env'
-    if not env_path.exists():
-        raise FileNotFoundError(f"CRITICAL: .env file not found in {script_dir}. Please create one from the env.template file.")
-    load_dotenv(dotenv_path=env_path)
-    
-    keys = {
-        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
-        "OPENVERSE_API_KEY": os.getenv("OPENVERSE_API_KEY"),
-        "FLICKR_API_KEY": os.getenv("FLICKR_API_KEY"),
+    env_keys = {}
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+        env_keys = {
+            "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
+            "OPENVERSE_API_KEY": os.getenv("OPENVERSE_API_KEY"),
+            "FLICKR_API_KEY": os.getenv("FLICKR_API_KEY"),
+        }
+
+    # Prioritize UI keys
+    final_keys = {
+        "GEMINI_API_KEY": ui_keys.get("GEMINI_API_KEY") or env_keys.get("GEMINI_API_KEY"),
+        "OPENVERSE_API_KEY": ui_keys.get("OPENVERSE_API_KEY") or env_keys.get("OPENVERSE_API_KEY"),
+        "FLICKR_API_KEY": ui_keys.get("FLICKR_API_KEY") or env_keys.get("FLICKR_API_KEY"),
     }
-    
-    if not keys["GEMINI_API_KEY"]:
-        raise ValueError(f"CRITICAL: GEMINI_API_KEY is missing or empty in {env_path}.")
+
+    if not final_keys["GEMINI_API_KEY"]:
+        raise ValueError("CRITICAL: Gemini API Key not found in UI or .env file.")
         
-    return keys
+    return final_keys
 
 # --- UI Helpers ---
 def guess_lecture_details(file: gr.File) -> Tuple[str, str]:

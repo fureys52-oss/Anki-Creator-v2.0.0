@@ -12,7 +12,7 @@ import pytesseract
 from PIL import Image
 import markdown2
 
-from utils import get_api_keys_from_env, manage_log_files, configure_tesseract, slugify, is_superfluous, save_settings
+from utils import get_api_keys, manage_log_files, configure_tesseract, slugify, is_superfluous, save_settings
 from image_finder import ImageFinder, PDFImageSource, WikimediaSource, NLMOpenISource, OpenverseSource, FlickrSource
 from model_manager import GeminiModelManager
 
@@ -73,13 +73,13 @@ NOTE_TYPE_CONFIG = {
     "cloze": {
         "modelName": "ADG - Atomic Cloze", "fields": ["Text", "Extra", "Image", "Source"], "isCloze": True,
         "css": ".card { font-family: Arial; font-size: 20px; text-align: center; } .cloze { font-weight: bold; color: %s; } img { max-height: 500px; min-width: 400px; min-height: 250px; object-fit: contain; }",
-        "templates": [ { "Name": "Cloze Card", "Front": "{{cloze:Text}}", "Back": """{{cloze:Text}}<br><br>{{Extra}}<br><br>{{#Image}}{{Image}}{{/Image}}<div style='font-size:12px; color:grey;'>{{Source}}</div>""" } ],
+        "templates": [ { "Name": "Cloze Card", "Front": "{{Extra}}<br><br>{{cloze:Text}}", "Back": """{{Extra}}<br><br>{{cloze:Text}}<br><br>{{#Image}}{{Image}}{{/Image}}<div style='font-size:12px; color:grey;'>{{Source}}</div>""" } ],
         "function_tool": CLOZE_COMPONENTS_TOOL
     },
     "contextual_cloze": {
         "modelName": "ADG - Contextual Cloze", "fields": ["Text", "Extra", "Image", "Source"], "isCloze": True,
         "css": ".card { font-family: Arial; font-size: 20px; text-align: center; } .cloze { font-weight: bold; color: %s; } img { max-height: 500px; min-width: 400px; min-height: 250px; object-fit: contain; }",
-        "templates": [ { "Name": "Cloze Card", "Front": "{{cloze:Text}}", "Back": """{{cloze:Text}}<br><br>{{Extra}}<br><br>{{#Image}}{{Image}}{{/Image}}<div style='font-size:12px; color:grey;'>{{Source}}</div>""" } ],
+        "templates": [ { "Name": "Cloze Card", "Front": "{{Extra}}<br><br>{{cloze:Text}}", "Back": """{{Extra}}<br><br>{{cloze:Text}}<br><br>{{#Image}}{{Image}}{{/Image}}<div style='font-size:12px; color:grey;'>{{Source}}</div>""" } ],
         "function_tool": CLOZE_COMPONENTS_TOOL
     },
     "mermaid": {
@@ -877,13 +877,15 @@ class DeckProcessor:
 # --- Main Generator Function ---
 
 
-from utils import get_api_keys_from_env, manage_log_files, configure_tesseract, slugify, is_superfluous, save_settings
+from utils import get_api_keys, manage_log_files, configure_tesseract, slugify, is_superfluous, save_settings
 
 def generate_all_decks(max_decks: int, *args):
+    # --- Initial Setup ---
     master_files, generate_button, log_output, clip_model, *remaining_args = args
     
     log_history = ""
     session_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
     def logger(message):
         nonlocal log_history
         timestamp_msg = f"[{datetime.now().strftime('%H:%M:%S')}] {message}\n"
@@ -893,68 +895,89 @@ def generate_all_decks(max_decks: int, *args):
 
     final_ui_state = [gr.update(), gr.update(interactive=True), gr.update(value="Generate All Decks")]
     log_file_path = None
-    
-    settings_keys = [
+    current_settings = {} # Initialize to prevent UnboundLocalError in 'finally'
+
+    try:
+        # --- Start of Processing ---
+        yield logger("Starting Anki Deck Generator..."), gr.update(interactive=False), gr.update(value="Processing...")
+        
+        # Import app-level configs
+        from app import LOG_DIR, MAX_LOG_FILES, PDF_CACHE_DIR, AI_CACHE_DIR
+        manage_log_files(LOG_DIR, MAX_LOG_FILES)
+        cache_dirs = (PDF_CACHE_DIR, AI_CACHE_DIR)
+        
+        # --- 1. GATHER ALL SETTINGS FROM THE UI ---
+        
+        # Separate the raw arguments from the UI into deck-specific and general settings
+        deck_inputs_flat = remaining_args[:max_decks * 2]
+        settings_and_prompts_values = remaining_args[max_decks * 2:]
+
+        # This list MUST be in the exact same order as the components in `all_gen_inputs` in ui.py
+        settings_keys = [
             # Core Settings
-            "card_type",
-            "image_sources",
+            "card_type", "image_sources",
             # Basic Card Settings
-            "pos_color",
-            "neg_color",
-            "ex_color",
-            "tip_color",
-            "min_chars",
-            "max_chars",
-            "char_target",
+            "pos_color", "neg_color", "ex_color", "tip_color",
+            "min_chars", "max_chars", "char_target",
             # Cloze Settings
             "cloze_color",
             # Mermaid Settings
             "mermaid_theme",
             # Other Settings
-            "custom_tags",
-            "content_strategy",
-            "objectives_text_manual",
+            "custom_tags", "content_strategy", "objectives_text_manual",
+            # API Keys from UI
+            "gemini_api_key", "openverse_api_key", "flickr_api_key",
             # User Instructions
-            "builder_user_instructions",
-            "atomic_cloze_user_instructions",
-            "contextual_cloze_user_instructions",
-            "mermaid_user_instructions",
+            "builder_user_instructions", "atomic_cloze_user_instructions",
+            "contextual_cloze_user_instructions", "mermaid_user_instructions",
             # Hidden Templates
-            "builder_prompt_template",
-            "atomic_cloze_prompt_template",
-            "contextual_cloze_prompt_template",
-            "mermaid_prompt_template",
+            "builder_prompt_template", "atomic_cloze_prompt_template",
+            "contextual_cloze_prompt_template", "mermaid_prompt_template",
             # Editable Prompts
-            "curator_prompt",
-            "extractor_prompt",
-            "objective_finder_prompt",
-            "image_curator_prompt"
+            "curator_prompt", "extractor_prompt", "objective_finder_prompt", "image_curator_prompt"
         ]
-    
-    deck_inputs_flat = remaining_args[:max_decks * 2]
-    settings_and_prompts_values = remaining_args[max_decks * 2:]
-    current_settings = dict(zip(settings_keys, settings_and_prompts_values))
-    
-    try:
-        yield logger("Starting Anki Deck Generator..."), gr.update(interactive=False), gr.update(value="Processing...")
-        from app import LOG_DIR, MAX_LOG_FILES, PDF_CACHE_DIR, AI_CACHE_DIR
-        manage_log_files(LOG_DIR, MAX_LOG_FILES)
-        log_file_path = LOG_DIR / f"session_log_{session_timestamp}.txt"
-        cache_dirs = (PDF_CACHE_DIR, AI_CACHE_DIR)
         
+        # Create a single, clean dictionary of all settings
+        current_settings = dict(zip(settings_keys, settings_and_prompts_values))
+        
+        # --- 2. PROCESS THE GATHERED SETTINGS ---
+
+        # Process API Keys, prioritizing the UI
+        ui_api_keys = {
+            "GEMINI_API_KEY": current_settings.get("gemini_api_key"),
+            "OPENVERSE_API_KEY": current_settings.get("openverse_api_key"),
+            "FLICKR_API_KEY": current_settings.get("flickr_api_key"),
+        }
+        api_keys = get_api_keys(ui_api_keys)
+        
+        # Process Deck Configurations
+        deck_configs = []
+        for i in range(0, len(deck_inputs_flat), 2):
+            deck_title, files = deck_inputs_flat[i], deck_inputs_flat[i+1]
+            if deck_title and files:
+                deck_configs.append((deck_title, files))
+
+        # Perform pre-flight checks now that we have keys and deck info
+        if pre_flight_error := run_pre_flight_checks(api_keys, deck_configs):
+            yield logger(pre_flight_error), *final_ui_state[1:]
+            return
+            
+        yield logger("Pre-flight checks passed."), gr.update(), gr.update()
+
+        # --- 3. MAIN DECK GENERATION LOOP ---
+        
+        # Extract all settings that will be passed to the DeckProcessor
         card_type = current_settings["card_type"]
         image_sources = current_settings["image_sources"]
         pos_color, neg_color, ex_color, tip_color = current_settings["pos_color"], current_settings["neg_color"], current_settings["ex_color"], current_settings["tip_color"]
         cloze_color, mermaid_theme = current_settings["cloze_color"], current_settings["mermaid_theme"]
-        custom_tags_str = current_settings["custom_tags"]
+        custom_tags_str = current_settings.get("custom_tags", "")
+        custom_tags = [tag.strip() for tag in custom_tags_str.split(',') if tag.strip()]
         content_strategy = current_settings["content_strategy"]
         objectives_text = current_settings["objectives_text_manual"]
         min_chars, max_chars, char_target = current_settings["min_chars"], current_settings["max_chars"], current_settings["char_target"]
-
         color_map = {"positive_key_term": pos_color, "negative_key_term": neg_color, "example": ex_color, "mnemonic_tip": tip_color}
         card_gen_limits = {'min': min_chars, 'max': max_chars, 'target': char_target}
-        
-        # This dictionary now contains the UNFORMATTED templates and user instructions separately.
         prompts_dict = {
             'builder_template': current_settings["builder_prompt_template"],
             'builder_instructions': current_settings["builder_user_instructions"],
@@ -967,51 +990,45 @@ def generate_all_decks(max_decks: int, *args):
             'curator': current_settings["curator_prompt"], 'image_curator': current_settings["image_curator_prompt"], 
             'extractor': current_settings["extractor_prompt"], 'objective_finder': current_settings["objective_finder_prompt"],
         }
-        
-        content_options = [] 
-        custom_tags = [tag.strip() for tag in custom_tags_str.split(',') if tag.strip()]
-        api_keys = get_api_keys_from_env()
-        
-        deck_configs = []
-        for i in range(0, len(deck_inputs_flat), 2):
-            deck_title, files = deck_inputs_flat[i], deck_inputs_flat[i+1]
-            if deck_title and files: deck_configs.append((deck_title, files))
-
-        if pre_flight_error := run_pre_flight_checks(api_keys, deck_configs):
-            yield logger(pre_flight_error), *final_ui_state[1:]
-            return
-            
-        yield logger("Pre-flight checks passed."), gr.update(), gr.update()
+        content_options = []
         
         for i, (deck_name, files) in enumerate(deck_configs, 1):
             progress = gr.Progress(track_tqdm=True)
             yield logger(f"\n--- Starting Deck {i} of {len(deck_configs)}: '{deck_name}' ---"), gr.update(), gr.update()
             
             processor = DeckProcessor(
-                deck_name=deck_name, files=files, api_keys=api_keys, logger=logger, progress=progress, card_type=card_type, 
-                image_sources_config=image_sources, color_map=color_map, custom_tags=custom_tags, 
-                # --- FIX #2: USE THE CORRECT PARAMETER NAME ---
-                prompts_dict=prompts_dict, 
-                cache_dirs=cache_dirs, clip_model=clip_model, content_options=content_options, content_strategy=content_strategy,
-                objectives_text=objectives_text, card_gen_limits=card_gen_limits, cloze_color=cloze_color, mermaid_theme=mermaid_theme
+                deck_name=deck_name, files=files, api_keys=api_keys, logger=logger, progress=progress, 
+                card_type=card_type, image_sources_config=image_sources, color_map=color_map, 
+                custom_tags=custom_tags, prompts_dict=prompts_dict, cache_dirs=cache_dirs, 
+                clip_model=clip_model, content_options=content_options, content_strategy=content_strategy,
+                objectives_text=objectives_text, card_gen_limits=card_gen_limits, 
+                cloze_color=cloze_color, mermaid_theme=mermaid_theme
             )
             processor.run()
             yield logger(f"\n--- Finished Deck {i}: '{deck_name}' ---\n"), gr.update(), gr.update()
+            
             if i < len(deck_configs):
                 yield logger(f"--- Cooling down for {INTER_DECK_COOLDOWN_SECONDS} seconds before next deck... ---"), gr.update(), gr.update()
                 time.sleep(INTER_DECK_COOLDOWN_SECONDS)
                 
         logger("--- All Decks Processed! ---")
         
-        keys_to_filter = ["objectives_text_manual", "builder_prompt_template", "atomic_cloze_prompt_template", "contextual_cloze_prompt_template", "mermaid_prompt_template"]
+        # Filter out settings we don't want to save (like hidden prompts and one-time objectives)
+        keys_to_filter = [
+            "objectives_text_manual", "builder_prompt_template", "atomic_cloze_prompt_template", 
+            "contextual_cloze_prompt_template", "mermaid_prompt_template"
+        ]
         settings_to_save = {k: v for k, v in current_settings.items() if k not in keys_to_filter}
         save_settings(settings_to_save)
 
     except Exception as e:
         logger(f"\n--- A CRITICAL UNHANDLED ERROR OCCURRED ---\n{e}\nTraceback: {traceback.format_exc()}")
+    
     finally:
+        # --- Finalization and UI Reset ---
         if log_file_path and log_history:
             log_file_path.write_text(log_history, encoding="utf-8")
             logger(f"Session log saved to: {log_file_path}")
+        
         final_ui_state[0] = log_history
         yield tuple(final_ui_state)

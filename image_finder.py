@@ -267,7 +267,7 @@ class WikimediaSource(WebImageSource):
                             score = self._get_image_text_similarity(img_bytes, query_text, clip_model)
                             if score > self.similarity_threshold:
                                 print(f"[{self.name}] Found valid image with score {score:.2f}.")
-                                return {"image_bytes": img_bytes, "source": self.name}
+                                return {"image_bytes": img_bytes, "source": self.name, "score": score}
         except requests.RequestException as e:
             print(f"[{self.name}] API call failed: {e}")
         return None

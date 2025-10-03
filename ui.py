@@ -1,5 +1,5 @@
 ﻿from pathlib import Path
-from typing import List, Any, Tuple
+from typing import List, Any, Tuple, Callable
 import functools
 import gradio as gr
 from prompts import (
@@ -10,7 +10,7 @@ from prompts import (
 from utils import clear_cache, update_decks_from_files, load_settings
 from processing import generate_all_decks, HTML_COLOR_MAP
 
-def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_dir: Path, max_log_files: int, clip_model: Any) -> gr.Blocks:
+def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_dir: Path, max_log_files: int, clip_model: Any, update_checker_func: Callable) -> gr.Blocks:
     
     loaded_settings = load_settings()
     
@@ -22,6 +22,8 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
     with gr.Blocks(theme=gr.themes.Soft(primary_hue="blue"), title="Anki Deck Generator") as app:
         clip_model_state = gr.State(clip_model)
         
+        update_notifier = gr.Markdown(visible=False) 
+
         gr.Markdown(f"# Anki Flashcard Generator\n*(v{version})*")
 
         with gr.Row():
@@ -92,6 +94,26 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
                             cache_status = gr.Textbox(label="Cache Status", interactive=False)
                          with gr.Accordion("Acknowledgements", open=False):
                             gr.Markdown("This project was built with the invaluable help of the open-source community.")
+                         with gr.Accordion("API Keys", open=True):
+                            gr.Markdown("Keys are saved locally in `settings.json`. For security, you can leave these blank to use a `.env` file instead.")
+                            gemini_api_key_textbox = gr.Textbox(
+                                label="Gemini API Key", 
+                                type="password", 
+                                value=loaded_settings.get("gemini_api_key", ""),
+                                placeholder="Enter your Google AI Studio key here"
+                            )
+                            openverse_api_key_textbox = gr.Textbox(
+                                label="Openverse API Key (Optional)", 
+                                type="password", 
+                                value=loaded_settings.get("openverse_api_key", ""),
+                                placeholder="Enter your Openverse key here"
+                            )
+                            flickr_api_key_textbox = gr.Textbox(
+                                label="Flickr API Key (Optional)", 
+                                type="password", 
+                                value=loaded_settings.get("flickr_api_key", ""),
+                                placeholder="Enter your Flickr key here"
+                            )
             
             with gr.Column(scale=1):
                 with gr.Group():
@@ -103,9 +125,9 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
                     with gr.Accordion("Basic Card Settings", visible=("Basic" in loaded_settings.get("card_type", "Conceptual (Basic Cards)"))) as basic_card_settings_accordion:
                         gr.Markdown("Fine-tune the content of 'Basic' cards.")
                         with gr.Row():
-                            min_chars_input = gr.Number(label="Min Answer Chars", value=loaded_settings.get("min_chars", 150), step=25)
+                            min_chars_input = gr.Number(label="Min Answer Chars", value=loaded_settings.get("min_chars", 50), step=25, minimum=0)
                             max_chars_input = gr.Number(label="Max Answer Chars", value=loaded_settings.get("max_chars", 550), step=25)
-                        char_target_slider = gr.Slider(minimum=200, maximum=1000, step=50, label="Ideal Target Length (Characters)", value=loaded_settings.get("char_target", 450))
+                        char_target_slider = gr.Slider(minimum=50, maximum=1000, step=25, label="Ideal Target Length (Characters)", value=loaded_settings.get("char_target", 200))
                         with gr.Row():
                             pos_color_picker = gr.ColorPicker(loaded_settings.get("pos_color", HTML_COLOR_MAP['positive_key_term']), label="<pos> color")
                             neg_color_picker = gr.ColorPicker(loaded_settings.get("neg_color", HTML_COLOR_MAP['negative_key_term']), label="<neg> color")
@@ -172,6 +194,9 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
             custom_tags_textbox,
             content_strategy,
             objectives_textbox,
+            gemini_api_key_textbox,
+            openverse_api_key_textbox,
+            flickr_api_key_textbox,
             # User Instructions
             builder_user_instructions,
             atomic_cloze_user_instructions,
@@ -198,5 +223,5 @@ def build_ui(version: str, max_decks: int, cache_dirs: Tuple[Path, Path], log_di
         
         all_deck_files_components = [ui for i, ui in enumerate(deck_input_components) if i % 2 == 1]
         new_batch_button.click(fn=lambda: (gr.update(value=None), gr.update(value=""), []) + [gr.update(value=[]) for _ in all_deck_files_components], outputs=[master_files, log_output] + all_deck_files_components)
-
+        app.load(update_checker_func, None, update_notifier)
     return app

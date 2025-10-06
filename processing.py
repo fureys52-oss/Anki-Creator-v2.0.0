@@ -214,8 +214,10 @@ def call_gemini(prompt: str, api_key: str, model_name: str, tools: Optional[List
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=300)
         
+        # --- THIS IS THE KEY CHANGE ---
         if response.status_code == 429: 
-            return "API_LIMIT_REACHED"
+            return "API_LIMIT_REACHED" # Return a special signal
+        # --- END CHANGE ---
         
         response.raise_for_status()
 
@@ -245,30 +247,6 @@ def call_gemini(prompt: str, api_key: str, model_name: str, tools: Optional[List
         
     return "Error: An unknown error occurred in the Gemini API call."
 
-def _validate_and_repair_mermaid_code(code: str, api_key: str, flash_model: str) -> str:
-    """Uses a cheap, fast AI call to validate and fix Mermaid.js syntax."""
-    if not code or "graph" not in code:
-        return "graph TD;\\n  A[Invalid Code];" # Return a default error graph
-
-    validation_prompt = f"""
-You are a Mermaid.js syntax linter. Your only job is to validate and correct the provided code.
-RULES:
-1. Check if the following code is valid Mermaid.js syntax.
-2. If it is VALID, return the code UNCHANGED.
-3. If it is INVALID, fix the syntax errors and return ONLY the corrected code.
-4. Do not add any explanation, comments, or surrounding text.
-
---- CODE ---
-{code}
-"""
-    response = call_gemini(validation_prompt, api_key, model_name=flash_model, task_id="mermaid_validation")
-    
-    if isinstance(response, str) and "graph" in response:
-        cleaned_response = re.sub(r'```mermaid|```', '', response).strip()
-        return cleaned_response
-    else:
-        return code
-
 # --- AnkiConnect ---
 def invoke_ankiconnect(action: str, **params: Any) -> Tuple[Optional[Any], Optional[str]]:
     try:
@@ -279,13 +257,15 @@ def invoke_ankiconnect(action: str, **params: Any) -> Tuple[Optional[Any], Optio
     except requests.exceptions.RequestException as e:
         return None, f"Could not connect to AnkiConnect: {e}"
 
-def run_pre_flight_checks(api_keys: Dict[str, str], deck_configs: List[Tuple]) -> Optional[str]:
+def run_pre_flight_checks(primary_gemini_key: str, deck_configs: List[Tuple]) -> Optional[str]:
     version, error = invoke_ankiconnect("version")
     if error or not version: return "CRITICAL ERROR: Could not connect to Anki.\nSOLUTION: Please ensure Anki is running and AnkiConnect is installed."
     if int(version) < 6: return f"CRITICAL ERROR: Your AnkiConnect add-on is outdated (Version {version}). Please update."
-    test_response = call_gemini("Hello", api_keys['GEMINI_API_KEY'], model_name="gemini-1.5-flash-latest")
+    
+    test_response = call_gemini("Hello", primary_gemini_key, model_name="gemini-1.5-flash-latest")
+    
     if "API key not valid" in str(test_response) or "API_KEY_INVALID" in str(test_response):
-        return "CRITICAL ERROR: Your Gemini API Key appears to be invalid. Please check your .env file."
+        return "CRITICAL ERROR: Your Gemini API Key appears to be invalid. Please check your .env file or UI input."
     if not deck_configs: return "ERROR: No valid decks configured. Please upload at least one PDF and provide a deck name."
     for _, files in deck_configs:
         for pdf in files:
@@ -350,18 +330,18 @@ class DeckProcessor:
     def __init__(self, deck_name, files, api_keys, logger, progress, card_type, image_sources_config, 
                  color_map, custom_tags, prompts_dict, cache_dirs, clip_model, 
                  content_options, content_strategy, objectives_text, card_gen_limits,
-                 cloze_color, mermaid_theme):
+                 cloze_color, mermaid_theme, card_grouping_options, pdf_language): # <-- ADDED
         self.deck_name = deck_name
         self.files = files
         self.api_keys = api_keys
+        self.gemini_api_keys = api_keys.get("GEMINI_API_KEYS", []) 
+        self.active_gemini_key_index = 0
         self.logger_func = logger
         self.progress = progress
         self.card_type = card_type
         self.image_sources_config = image_sources_config
         self.color_map = color_map
         self.custom_tags = custom_tags
-        # --- THIS IS THE FIX ---
-        # The attribute must be named self.prompts_dict to match the rest of the class.
         self.prompts_dict = prompts_dict
         self.pdf_cache_dir, self.ai_cache_dir = cache_dirs
         self.clip_model = clip_model['model'] if clip_model else None
@@ -371,6 +351,8 @@ class DeckProcessor:
         self.card_gen_limits = card_gen_limits
         self.cloze_color = cloze_color
         self.mermaid_theme = mermaid_theme
+        self.card_grouping_options = card_grouping_options # <-- ADDED
+        self.pdf_language = pdf_language
         
         if "Basic" in self.card_type: self.note_type_key = "basic"
         elif "Atomic Cloze" in self.card_type: self.note_type_key = "cloze"
@@ -389,7 +371,46 @@ class DeckProcessor:
         self.image_finder = None
         self.curated_image_pages = []
 
+    def get_active_gemini_key(self):
+        """Helper to get the current key for an API call."""
+        if not self.gemini_api_keys:
+            return None
+        return self.gemini_api_keys[self.active_gemini_key_index]
+
     def log(self, message): self.logger_func(message)
+
+    def _execute_gemini_call_with_rotation(self, prompt: str, model_name: str, tools: Optional[List[Dict]] = None, task_id: str = "generic") -> Any:
+        """
+        Executes a Gemini API call and automatically rotates to the next key if a 429 quota error occurs.
+        """
+        if not self.gemini_api_keys:
+            return "CRITICAL_ERROR: No Gemini API keys are available."
+
+        initial_key_index = self.active_gemini_key_index
+        
+        for attempt in range(len(self.gemini_api_keys)):
+            active_key = self.get_active_gemini_key()
+            if not active_key: continue # Should not happen, but good practice
+
+
+
+            response = call_gemini(prompt, active_key, model_name, tools, task_id)
+
+            if response == "API_LIMIT_REACHED":
+                self.log(f"   > WARNING: API Key #{initial_key_index + attempt + 1} has reached its daily quota.")
+                self.active_gemini_key_index = (self.active_gemini_key_index + 1) % len(self.gemini_api_keys)
+                
+                if self.active_gemini_key_index == initial_key_index: # We've looped through all keys
+                    self.log("   > CRITICAL: All available API keys have reached their quota.")
+                    return "CRITICAL_ERROR: All API keys are exhausted."
+                
+                self.log(f"   > Rotating to API Key #{self.active_gemini_key_index + 1}...")
+                continue # Retry with the next key
+            
+            # If the response is anything else (success or a different error), return it immediately.
+            return response
+        
+        return "CRITICAL_ERROR: All API keys failed."
 
     def _initialize_image_finder(self):
         if self.clip_model:
@@ -404,7 +425,7 @@ class DeckProcessor:
         self.log("   > Attempting to auto-extract learning objectives...")
         
         prompt = self.prompts_dict['objective_finder'].format(full_text=self.full_text)
-        response = call_gemini(prompt, self.api_keys["GEMINI_API_KEY"], model_name=self.flash_model, task_id="find_objectives")
+        response = self._execute_gemini_call_with_rotation(prompt, model_name=self.flash_model, task_id="find_objectives")
 
         if isinstance(response, str) and "NO_OBJECTIVES_FOUND" not in response and len(response) > 10:
             self.log("   > SUCCESS: Auto-extracted objectives.")
@@ -415,7 +436,7 @@ class DeckProcessor:
 
     def run(self):
         try:
-            manager = GeminiModelManager(self.api_keys["GEMINI_API_KEY"])
+            manager = GeminiModelManager(self.get_active_gemini_key())
             optimal_models = manager.get_optimal_models()
             if not optimal_models:
                 self.log("CRITICAL ERROR: Could not determine optimal Gemini models. Halting process.")
@@ -446,8 +467,15 @@ class DeckProcessor:
             
             if not structured_facts: return
 
-            filtered_facts = [fact for fact in structured_facts if not is_superfluous(fact['fact'])]
-            self.log(f"\n--- Pre-filtering complete. {len(filtered_facts)} high-quality facts remain. ---")
+            if self.pdf_language == "English":
+                self.log("\n--- Filtering superfluous facts for English text... ---")
+                filtered_facts = [fact for fact in structured_facts if not is_superfluous(fact['fact'])]
+            else:
+                self.log(f"\n--- Bypassing superfluous fact filter for non-English language ('{self.pdf_language}'). ---")
+                filtered_facts = structured_facts
+            # --- END NEW LOGIC ---
+
+            self.log(f"--- Pre-filtering complete. {len(filtered_facts)} high-quality facts remain. ---")
             if not filtered_facts: return
 
             final_cards_data = self._generate_cards(filtered_facts)
@@ -459,6 +487,35 @@ class DeckProcessor:
         except Exception as e:
             self.log(f"\n--- A CRITICAL ERROR OCCURRED IN DECK '{self.deck_name}' ---\n{e}\nTraceback: {traceback.format_exc()}")
 
+    def _validate_and_repair_mermaid_code(self, code: str) -> str:
+        """Uses a cheap, fast AI call to validate and fix Mermaid.js syntax."""
+        if not code or "graph" not in code:
+            return "graph TD;\\n  A[Invalid Code];" # Return a default error graph
+
+        validation_prompt = f"""
+            You are a Mermaid.js syntax linter. Your only job is to validate and correct the provided code.
+            RULES:
+            1. Check if the following code is valid Mermaid.js syntax.
+            2. If it is VALID, return the code UNCHANGED.
+            3. If it is INVALID, fix the syntax errors and return ONLY the corrected code.
+            4. Do not add any explanation, comments, or surrounding text.
+
+            --- CODE ---
+            {code}
+            """
+        # --- MODIFIED: Use the new rotation-aware method ---
+        response = self._execute_gemini_call_with_rotation(
+            validation_prompt, 
+            model_name=self.flash_model, 
+            task_id="mermaid_validation"
+        )
+        
+        if isinstance(response, str) and "graph" in response:
+            cleaned_response = re.sub(r'```mermaid|```', '', response).strip()
+            return cleaned_response
+        else:
+            return code
+
     def _curate_text_pages(self) -> str:
         self.log("\n--- AI Pass 0: Curating text pages ---")
         case_instruction = "You MUST classify pages containing case studies as 'Core'." if "Include Case Studies" in self.content_options else "You MUST classify pages containing introductory case studies as 'Superfluous'."
@@ -466,8 +523,7 @@ class DeckProcessor:
         
         # Assemble the full prompt from the template and user instructions
         full_prompt = self.prompts_dict['curator'].format(case_study_instruction=case_instruction, table_instruction=table_instruction)
-        
-        response = call_gemini(full_prompt + "\n\n--- TEXT ---\n" + self.full_text, self.api_keys["GEMINI_API_KEY"], model_name=self.flash_model, task_id="curate_text")
+        response = self._execute_gemini_call_with_rotation(full_prompt + "\n\n--- TEXT ---\n" + self.full_text, model_name=self.flash_model, task_id="curate_text")
         
         if "API_" in str(response) or not response:
             self.log("   > WARNING: AI text curation failed. Proceeding with all pages.")
@@ -520,9 +576,7 @@ class DeckProcessor:
         # --- END of new logic ---
 
         prompt = self.prompts_dict['image_curator'].format(total_pages=total_pages, page_summaries_json=page_summaries_json)
-        
-        # We no longer need to send the full text, just the prompt with the JSON summary
-        response = call_gemini(prompt, self.api_keys["GEMINI_API_KEY"], model_name=self.flash_model, task_id="curate_images")
+        response = self._execute_gemini_call_with_rotation(prompt, model_name=self.flash_model, task_id="curate_images")
 
         if not response or "API_" in str(response):
             self.log("   > WARNING: AI image curation failed. Image search will consider all pages.")
@@ -616,7 +670,7 @@ class DeckProcessor:
                         wait_time = request_timestamps[0] - (current_time - 60) + 0.1
                         time.sleep(wait_time)
                 prompt = self.prompts_dict['extractor'] + "\n\n--- TEXT ---\n" + batch_content
-                response = call_gemini(prompt, self.api_keys["GEMINI_API_KEY"], model_name=extractor_model, task_id=f"extract_batch_{page_range_str}")
+                response = call_gemini(prompt, self.get_active_gemini_key(), model_name=extractor_model, task_id=f"extract_batch_{page_range_str}")
                 was_successful = False
                 if isinstance(response, str):
                     match = re.search(r'\[.*\]', response, re.DOTALL)
@@ -657,6 +711,11 @@ class DeckProcessor:
 
         self.log("\n--- No cached response found. Generating new cards with AI... ---")
         
+        language_instruction = ""
+        if self.pdf_language != "English":
+            language_instruction = f"CRITICAL INSTRUCTION: You MUST generate all output text (questions, answers, and image search queries) in {self.pdf_language}."
+            self.log(f"   > Applying multilingual generation rule: Target language is {self.pdf_language}.")
+
         objectives_section, fact_mandate_rule = "", ""
         if "Objectives" in self.content_strategy and self.objectives_text:
             self.log("   > STRATEGY: Objectives-Focused. AI will filter facts.")
@@ -676,6 +735,30 @@ class DeckProcessor:
             self.log(f"   > Generating cards for fact batch {batch_num} of {total_batches}...")
 
             prompt, tools = None, None
+            
+            # --- NEW LOGIC (Task 2.1): Task-Based Model Switching ---
+            model_for_this_batch = ""
+            if "Atomic Cloze" in self.card_type:
+                model_for_this_batch = self.flash_model
+                self.log(f"   > Using FLASH model ({self.flash_model}) for simple 'Atomic Cloze' task.")
+            else:
+                model_for_this_batch = self.pro_model
+                self.log(f"   > Using PRO model ({self.pro_model}) for complex task.")
+            # --- END NEW LOGIC ---
+
+            fact_grouping_instruction = "Group facts into logical, conceptual chunks based on the topic."
+            
+            if "Basic" in self.card_type and not self.card_grouping_options.get('basic_let_ai_decide_facts', True):
+                min_f = self.card_grouping_options.get('basic_min_facts_input', 2)
+                max_f = self.card_grouping_options.get('basic_max_facts_input', 5)
+                fact_grouping_instruction = f"You MUST group between {min_f} and {max_f} related facts to create each card."
+                self.log(f"   > Applying Basic Card rule: Group {min_f}-{max_f} facts per card.")
+
+            elif "Contextual Cloze" in self.card_type and not self.card_grouping_options.get('contextual_let_ai_decide_facts', True):
+                min_f = self.card_grouping_options.get('contextual_min_facts_input', 2)
+                max_f = self.card_grouping_options.get('contextual_max_facts_input', 5)
+                fact_grouping_instruction = f"Find a cluster of {min_f} to {max_f} related facts to synthesize into a single sentence."
+                self.log(f"   > Applying Contextual Cloze rule: Group {min_f}-{max_f} facts per card.")
 
             atomic_facts_with_pages = ""
             if "Cloze" in self.card_type:
@@ -687,12 +770,12 @@ class DeckProcessor:
                 for page_num in sorted(pages_to_facts.keys()):
                     atomic_facts_with_pages += f"--- Page(s) {page_num} ---\n" + "\n".join(pages_to_facts[page_num]) + "\n"
             
-            # --- THIS IS THE FIX ---
-            # Replace all instances of `self.prompts_and_instructions` with `self.prompts_dict`
             if "Basic" in self.card_type:
                 prompt = self.prompts_dict['builder_template'].format(
+                    language_instruction=language_instruction,
                     user_instructions=self.prompts_dict['builder_instructions'],
                     fact_mandate_placeholder=fact_mandate_rule,
+                    fact_grouping_instruction=fact_grouping_instruction, # <-- ADDED
                     objectives_section=objectives_section,
                     atomic_facts_json=json.dumps(batch_facts, indent=2),
                     min_chars=self.card_gen_limits['min'], max_chars=self.card_gen_limits['max'],
@@ -701,6 +784,7 @@ class DeckProcessor:
                 tools = [{"function_declarations": [NOTE_TYPE_CONFIG['basic']['function_tool']]}]
             elif "Atomic Cloze" in self.card_type:
                 prompt = self.prompts_dict['cloze_template'].format(
+                    language_instruction=language_instruction,
                     user_instructions=self.prompts_dict['cloze_instructions'],
                     fact_mandate_placeholder=fact_mandate_rule,
                     objectives_section=objectives_section,
@@ -709,14 +793,17 @@ class DeckProcessor:
                 tools = [{"function_declarations": [NOTE_TYPE_CONFIG['cloze']['function_tool']]}]
             elif "Contextual Cloze" in self.card_type:
                 prompt = self.prompts_dict['contextual_cloze_template'].format(
+                    language_instruction=language_instruction,
                     user_instructions=self.prompts_dict['contextual_cloze_instructions'],
                     fact_mandate_placeholder=fact_mandate_rule,
+                    fact_grouping_instruction=fact_grouping_instruction, # <-- ADDED
                     objectives_section=objectives_section,
                     atomic_facts_with_pages=atomic_facts_with_pages
                 )
                 tools = [{"function_declarations": [NOTE_TYPE_CONFIG['contextual_cloze']['function_tool']]}]
             elif "Mermaid" in self.card_type:
                 prompt = self.prompts_dict['mermaid_template'].format(
+                    language_instruction=language_instruction,
                     user_instructions=self.prompts_dict['mermaid_instructions'],
                     fact_mandate_placeholder=fact_mandate_rule,
                     objectives_section=objectives_section,
@@ -728,7 +815,13 @@ class DeckProcessor:
                 self.log(f"ERROR: Could not determine prompt for card type '{self.card_type}' for batch {batch_num}. Skipping.")
                 continue
 
-            batch_result = call_gemini(prompt, self.api_keys["GEMINI_API_KEY"], model_name=self.pro_model, tools=tools, task_id=f"generate_cards_batch_{batch_num}")
+            # --- MODIFIED: Use the dynamically selected model ---
+            batch_result = self._execute_gemini_call_with_rotation(
+                prompt,
+                model_name=model_for_this_batch,
+                tools=tools,
+                task_id=f"generate_cards_batch_{batch_num}"
+            )
 
             if isinstance(batch_result, list):
                 all_generated_function_calls.extend(batch_result)
@@ -815,8 +908,18 @@ class DeckProcessor:
                     max_page = max(full_source_page_numbers) if full_source_page_numbers else 0
                     expanded_range = set(range(max(1, min_page - 1), max_page + 2))
                     expanded_pages = [p for p in expanded_range if p in self.curated_image_pages]
-                    image_html = self.image_finder.find_best_image(query_texts=search_queries, clip_model=self.clip_model, pdf_path=main_pdf_path, pdf_images_cache=self.pdf_images_cache, focused_search_pages=focused_pages, expanded_search_pages=expanded_pages, full_source_page_numbers=full_source_page_numbers)
-
+                    
+                    # --- THIS IS THE FIX: Pass the image_sources_config to the function ---
+                    image_html = self.image_finder.find_best_image(
+                        query_texts=search_queries, 
+                        clip_model=self.clip_model, 
+                        pdf_path=main_pdf_path, 
+                        pdf_images_cache=self.pdf_images_cache, 
+                        focused_search_pages=focused_pages, 
+                        expanded_search_pages=expanded_pages, 
+                        full_source_page_numbers=full_source_page_numbers,
+                        image_sources_config=self.image_sources_config # <-- ADD THIS LINE
+                    )
                 page_str = f"Pgs {', '.join(map(str, sorted(list(set(full_source_page_numbers)))))}"
                 source_text = f"{Path(main_pdf_path).stem} - {page_str}"
                 
@@ -853,8 +956,8 @@ class DeckProcessor:
 
                 elif card_data['type'] == 'mermaid':
                     final_note_type_key = 'mermaid'
-                    front_code = _validate_and_repair_mermaid_code(card_data.get("mermaid_front_code", ""), self.api_keys["GEMINI_API_KEY"], self.flash_model)
-                    back_code = _validate_and_repair_mermaid_code(card_data.get("mermaid_back_code", ""), self.api_keys["GEMINI_API_KEY"], self.flash_model)
+                    front_code = self._validate_and_repair_mermaid_code(card_data.get("mermaid_front_code", ""))
+                    back_code = self._validate_and_repair_mermaid_code(card_data.get("mermaid_back_code", ""))
                     fields = {"Front": card_data.get("front"), "Back": card_data.get("back_text"), "MermaidFront": front_code, "MermaidBack": back_code, "Source": source_text, "Image": image_html or ""}
 
                 if not fields:
@@ -895,24 +998,19 @@ def generate_all_decks(max_decks: int, *args):
 
     final_ui_state = [gr.update(), gr.update(interactive=True), gr.update(value="Generate All Decks")]
     log_file_path = None
-    current_settings = {} # Initialize to prevent UnboundLocalError in 'finally'
+    current_settings = {}
 
     try:
-        # --- Start of Processing ---
         yield logger("Starting Anki Deck Generator..."), gr.update(interactive=False), gr.update(value="Processing...")
         
-        # Import app-level configs
         from app import LOG_DIR, MAX_LOG_FILES, PDF_CACHE_DIR, AI_CACHE_DIR
         manage_log_files(LOG_DIR, MAX_LOG_FILES)
         cache_dirs = (PDF_CACHE_DIR, AI_CACHE_DIR)
         
         # --- 1. GATHER ALL SETTINGS FROM THE UI ---
-        
-        # Separate the raw arguments from the UI into deck-specific and general settings
         deck_inputs_flat = remaining_args[:max_decks * 2]
         settings_and_prompts_values = remaining_args[max_decks * 2:]
 
-        # This list MUST be in the exact same order as the components in `all_gen_inputs` in ui.py
         settings_keys = [
             # Core Settings
             "card_type", "image_sources",
@@ -924,9 +1022,10 @@ def generate_all_decks(max_decks: int, *args):
             # Mermaid Settings
             "mermaid_theme",
             # Other Settings
-            "custom_tags", "content_strategy", "objectives_text_manual",
+            "custom_tags", "pdf_language", "content_strategy", "objectives_text_manual",
             # API Keys from UI
-            "gemini_api_key", "openverse_api_key", "flickr_api_key",
+            "gemini_api_key_1", "gemini_api_key_2", "gemini_api_key_3", "gemini_api_key_4", "gemini_api_key_5",
+            "openverse_api_key", "flickr_api_key",
             # User Instructions
             "builder_user_instructions", "atomic_cloze_user_instructions",
             "contextual_cloze_user_instructions", "mermaid_user_instructions",
@@ -934,31 +1033,41 @@ def generate_all_decks(max_decks: int, *args):
             "builder_prompt_template", "atomic_cloze_prompt_template",
             "contextual_cloze_prompt_template", "mermaid_prompt_template",
             # Editable Prompts
-            "curator_prompt", "extractor_prompt", "objective_finder_prompt", "image_curator_prompt"
+            "curator_prompt", "extractor_prompt", "objective_finder_prompt", "image_curator_prompt",
+            # Basic Card Fact Limits
+            "basic_let_ai_decide_facts", "basic_min_facts_input", "basic_max_facts_input",
+            # Contextual Cloze Fact Limits
+            "contextual_let_ai_decide_facts", "contextual_min_facts_input", "contextual_max_facts_input",
         ]
         
-        # Create a single, clean dictionary of all settings
         current_settings = dict(zip(settings_keys, settings_and_prompts_values))
         
         # --- 2. PROCESS THE GATHERED SETTINGS ---
-
-        # Process API Keys, prioritizing the UI
-        ui_api_keys = {
-            "GEMINI_API_KEY": current_settings.get("gemini_api_key"),
+        ui_gemini_keys = [
+            current_settings.get("gemini_api_key_1"), current_settings.get("gemini_api_key_2"),
+            current_settings.get("gemini_api_key_3"), current_settings.get("gemini_api_key_4"),
+            current_settings.get("gemini_api_key_5"),
+        ]
+        
+        ui_api_keys_dict = {
+            "GEMINI_API_KEYS": [key for key in ui_gemini_keys if key],
             "OPENVERSE_API_KEY": current_settings.get("openverse_api_key"),
             "FLICKR_API_KEY": current_settings.get("flickr_api_key"),
         }
-        api_keys = get_api_keys(ui_api_keys)
+        api_keys = get_api_keys(ui_api_keys_dict)
         
-        # Process Deck Configurations
         deck_configs = []
         for i in range(0, len(deck_inputs_flat), 2):
             deck_title, files = deck_inputs_flat[i], deck_inputs_flat[i+1]
             if deck_title and files:
                 deck_configs.append((deck_title, files))
 
-        # Perform pre-flight checks now that we have keys and deck info
-        if pre_flight_error := run_pre_flight_checks(api_keys, deck_configs):
+        primary_gemini_key = api_keys.get("GEMINI_API_KEYS", [None])[0]
+        if not primary_gemini_key:
+            yield logger("CRITICAL ERROR: No valid Gemini API Key provided."), *final_ui_state[1:]
+            return
+
+        if pre_flight_error := run_pre_flight_checks(primary_gemini_key, deck_configs):
             yield logger(pre_flight_error), *final_ui_state[1:]
             return
             
@@ -967,53 +1076,92 @@ def generate_all_decks(max_decks: int, *args):
         # --- 3. MAIN DECK GENERATION LOOP ---
         
         # Extract all settings that will be passed to the DeckProcessor
-        card_type = current_settings["card_type"]
+        selected_card_types = current_settings["card_type"] # This is now a list
+        if not selected_card_types:
+             yield logger("ERROR: No card types were selected. Please check at least one card type."), *final_ui_state[1:]
+             return
+
         image_sources = current_settings["image_sources"]
-        pos_color, neg_color, ex_color, tip_color = current_settings["pos_color"], current_settings["neg_color"], current_settings["ex_color"], current_settings["tip_color"]
+        color_map = {"positive_key_term": current_settings["pos_color"], "negative_key_term": current_settings["neg_color"], "example": current_settings["ex_color"], "mnemonic_tip": current_settings["tip_color"]}
         cloze_color, mermaid_theme = current_settings["cloze_color"], current_settings["mermaid_theme"]
         custom_tags_str = current_settings.get("custom_tags", "")
         custom_tags = [tag.strip() for tag in custom_tags_str.split(',') if tag.strip()]
         content_strategy = current_settings["content_strategy"]
         objectives_text = current_settings["objectives_text_manual"]
-        min_chars, max_chars, char_target = current_settings["min_chars"], current_settings["max_chars"], current_settings["char_target"]
-        color_map = {"positive_key_term": pos_color, "negative_key_term": neg_color, "example": ex_color, "mnemonic_tip": tip_color}
-        card_gen_limits = {'min': min_chars, 'max': max_chars, 'target': char_target}
+        card_gen_limits = {'min': current_settings["min_chars"], 'max': current_settings["max_chars"], 'target': current_settings["char_target"]}
+        card_grouping_options = {
+            'basic_let_ai_decide_facts': current_settings.get("basic_let_ai_decide_facts"), 'basic_min_facts_input': current_settings.get("basic_min_facts_input"), 'basic_max_facts_input': current_settings.get("basic_max_facts_input"),
+            'contextual_let_ai_decide_facts': current_settings.get("contextual_let_ai_decide_facts"), 'contextual_min_facts_input': current_settings.get("contextual_min_facts_input"), 'contextual_max_facts_input': current_settings.get("contextual_max_facts_input"),
+        }
         prompts_dict = {
-            'builder_template': current_settings["builder_prompt_template"],
-            'builder_instructions': current_settings["builder_user_instructions"],
-            'cloze_template': current_settings["atomic_cloze_prompt_template"],
-            'cloze_instructions': current_settings["atomic_cloze_user_instructions"],
-            'contextual_cloze_template': current_settings["contextual_cloze_prompt_template"],
-            'contextual_cloze_instructions': current_settings["contextual_cloze_user_instructions"],
-            'mermaid_template': current_settings["mermaid_prompt_template"],
-            'mermaid_instructions': current_settings["mermaid_user_instructions"],
+            'builder_template': current_settings["builder_prompt_template"], 'builder_instructions': current_settings["builder_user_instructions"],
+            'cloze_template': current_settings["atomic_cloze_prompt_template"], 'cloze_instructions': current_settings["atomic_cloze_user_instructions"],
+            'contextual_cloze_template': current_settings["contextual_cloze_prompt_template"], 'contextual_cloze_instructions': current_settings["contextual_cloze_user_instructions"],
+            'mermaid_template': current_settings["mermaid_prompt_template"], 'mermaid_instructions': current_settings["mermaid_user_instructions"],
             'curator': current_settings["curator_prompt"], 'image_curator': current_settings["image_curator_prompt"], 
             'extractor': current_settings["extractor_prompt"], 'objective_finder': current_settings["objective_finder_prompt"],
         }
         content_options = []
         
+        pdf_language = current_settings.get("pdf_language", "English")
+        
+        # Mapping from long UI names to short names for sub-decks
+        CARD_TYPE_SHORT_NAME_MAP = {
+            "Conceptual (Basic Cards)": "Basic",
+            "Atomic Cloze (1 fact/card)": "Atomic Cloze",
+            "Contextual Cloze (AnkiKing Style)": "Contextual Cloze",
+            "Interactive Mermaid Diagram": "Mermaid"
+        }
+        
+        # --- NEW LOGIC (Task 2.4): Nested loops for multi-card-type generation ---
         for i, (deck_name, files) in enumerate(deck_configs, 1):
-            progress = gr.Progress(track_tqdm=True)
-            yield logger(f"\n--- Starting Deck {i} of {len(deck_configs)}: '{deck_name}' ---"), gr.update(), gr.update()
             
-            processor = DeckProcessor(
-                deck_name=deck_name, files=files, api_keys=api_keys, logger=logger, progress=progress, 
-                card_type=card_type, image_sources_config=image_sources, color_map=color_map, 
-                custom_tags=custom_tags, prompts_dict=prompts_dict, cache_dirs=cache_dirs, 
-                clip_model=clip_model, content_options=content_options, content_strategy=content_strategy,
-                objectives_text=objectives_text, card_gen_limits=card_gen_limits, 
-                cloze_color=cloze_color, mermaid_theme=mermaid_theme
-            )
-            processor.run()
-            yield logger(f"\n--- Finished Deck {i}: '{deck_name}' ---\n"), gr.update(), gr.update()
+            # Inner loop iterates through the card types selected in the UI
+            for j, card_type_selection in enumerate(selected_card_types, 1):
+                
+                
+                
+                progress = gr.Progress(track_tqdm=True)
+                # Use the original deck name, and update the log message
+                yield logger(f"\n--- Starting Job {j} of {len(selected_card_types)} for '{deck_name}' | Type: '{card_type_selection}' ---"), gr.update(), gr.update()
+
+                processor = DeckProcessor(
+                    deck_name=deck_name, # Use the new, specific sub-deck name
+                    files=files, 
+                    api_keys=api_keys, 
+                    logger=logger, 
+                    progress=progress, 
+                    card_type=card_type_selection, # Pass the single, specific card type for this run
+                    image_sources_config=image_sources, 
+                    color_map=color_map, 
+                    custom_tags=custom_tags, 
+                    prompts_dict=prompts_dict, 
+                    cache_dirs=cache_dirs, 
+                    clip_model=clip_model, 
+                    content_options=content_options, 
+                    content_strategy=content_strategy,
+                    objectives_text=objectives_text, 
+                    card_gen_limits=card_gen_limits, 
+                    cloze_color=cloze_color, 
+                    mermaid_theme=mermaid_theme,
+                    card_grouping_options=card_grouping_options,
+                    pdf_language=pdf_language
+                )
+                processor.run()
+                yield logger(f"\n--- Finished Job for '{deck_name}' ---"), gr.update(), gr.update()
+                
+                # Add a short cooldown between generating different card types for the same PDF set
+                if j < len(selected_card_types):
+                    time.sleep(5)
             
+            # Keep the longer cooldown between processing different user-defined decks
             if i < len(deck_configs):
                 yield logger(f"--- Cooling down for {INTER_DECK_COOLDOWN_SECONDS} seconds before next deck... ---"), gr.update(), gr.update()
                 time.sleep(INTER_DECK_COOLDOWN_SECONDS)
                 
-        logger("--- All Decks Processed! ---")
+        logger("--- All Decks and Card Types Processed! ---")
         
-        # Filter out settings we don't want to save (like hidden prompts and one-time objectives)
+        # Save settings at the very end
         keys_to_filter = [
             "objectives_text_manual", "builder_prompt_template", "atomic_cloze_prompt_template", 
             "contextual_cloze_prompt_template", "mermaid_prompt_template"
@@ -1025,7 +1173,6 @@ def generate_all_decks(max_decks: int, *args):
         logger(f"\n--- A CRITICAL UNHANDLED ERROR OCCURRED ---\n{e}\nTraceback: {traceback.format_exc()}")
     
     finally:
-        # --- Finalization and UI Reset ---
         if log_file_path and log_history:
             log_file_path.write_text(log_history, encoding="utf-8")
             logger(f"Session log saved to: {log_file_path}")

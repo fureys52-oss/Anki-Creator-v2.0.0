@@ -11,6 +11,50 @@ import gradio as gr
 import pytesseract
 import sys
 import json
+import sys
+import platform
+
+def configure_tesseract():
+    """
+    Checks for Tesseract. Prioritizes a bundled version if the app is frozen,
+    then checks PATH, then common installation paths.
+    """
+    if getattr(sys, 'frozen', False): # True when running as a bundled .exe or .app
+        application_path = os.path.dirname(sys.executable)
+        
+        if platform.system() == "Windows":
+            platform_dir = "windows"
+            executable_name = "tesseract.exe"
+        elif platform.system() == "Darwin": # macOS
+            platform_dir = "macos"
+            executable_name = "tesseract"
+        else: # Linux
+            platform_dir = "linux"
+            executable_name = "tesseract"
+
+        tesseract_path = os.path.join(application_path, 'binaries', platform_dir, executable_name)
+        tessdata_dir = os.path.join(application_path, 'binaries', platform_dir, 'tessdata')
+
+        if os.path.exists(tesseract_path):
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            os.environ['TESSDATA_PREFIX'] = tessdata_dir
+            print(f"Found bundled Tesseract for {platform.system()} at: {tesseract_path}")
+            return True
+    
+    # Fallback logic for development mode
+    if shutil.which("tesseract"):
+        print("Tesseract executable found in system PATH.")
+        return True
+    if sys.platform == "win32":
+        windows_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+        if os.path.exists(windows_path):
+            print(f"Tesseract found at default Windows location: {windows_path}")
+            pytesseract.pytesseract.tesseract_cmd = windows_path
+            return True
+
+    print("Tesseract executable not found.")
+    return False
+
 
 # --- File and Cache Management ---
 def manage_log_files(log_dir: Path, max_logs: int):
@@ -34,64 +78,43 @@ def clear_cache(pdf_cache_dir: Path, ai_cache_dir: Path) -> str:
         cache_dir.mkdir(exist_ok=True)
     return " ".join(results)
 
-def configure_tesseract():
-    """
-    Checks for Tesseract in PATH, then checks common installation paths
-    for Windows and macOS. Returns True if configured, False otherwise.
-    """
-    if shutil.which("tesseract"):
-        print("Tesseract executable found in system PATH.")
-        return True
-
-    # Platform-specific checks
-    if sys.platform == "win32":
-        windows_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-        if os.path.exists(windows_path):
-            print(f"Tesseract found at default Windows location: {windows_path}")
-            pytesseract.pytesseract.tesseract_cmd = windows_path
-            return True
-    elif sys.platform == "darwin": # macOS
-        # Common paths for Homebrew installations
-        paths_to_check = [
-            "/usr/local/bin/tesseract",      # Intel Macs
-            "/opt/homebrew/bin/tesseract"    # Apple Silicon Macs
-        ]
-        for path in paths_to_check:
-            if os.path.exists(path):
-                print(f"Tesseract found at default macOS location: {path}")
-                pytesseract.pytesseract.tesseract_cmd = path
-                return True
-
-    print("Tesseract executable not found in PATH or default installation directory.")
-    return False
 
 # --- Configuration and API Keys ---
-def get_api_keys(ui_keys: Dict[str, str]) -> Dict[str, str]:
+def get_api_keys(ui_keys: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Gets API keys, prioritizing keys entered in the UI over keys in a .env file.
+    Loads API keys, prioritizing keys from the UI over a .env file.
+    Handles the new list-based format for Gemini keys.
     """
-    # Load keys from .env file as a fallback
-    script_dir = Path(__file__).resolve().parent
-    env_path = script_dir / '.env'
-    env_keys = {}
-    if env_path.exists():
-        load_dotenv(dotenv_path=env_path)
-        env_keys = {
-            "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
-            "OPENVERSE_API_KEY": os.getenv("OPENVERSE_API_KEY"),
-            "FLICKR_API_KEY": os.getenv("FLICKR_API_KEY"),
-        }
+    load_dotenv()
+    final_keys = {}
 
-    # Prioritize UI keys
-    final_keys = {
-        "GEMINI_API_KEY": ui_keys.get("GEMINI_API_KEY") or env_keys.get("GEMINI_API_KEY"),
-        "OPENVERSE_API_KEY": ui_keys.get("OPENVERSE_API_KEY") or env_keys.get("OPENVERSE_API_KEY"),
-        "FLICKR_API_KEY": ui_keys.get("FLICKR_API_KEY") or env_keys.get("FLICKR_API_KEY"),
-    }
+    # --- NEW, CORRECTED LOGIC FOR GEMINI ---
+    # It now expects "GEMINI_API_KEYS" (plural) from the UI, which is a list.
+    ui_gemini_keys = ui_keys.get("GEMINI_API_KEYS", [])
+    env_gemini_key = os.getenv("GEMINI_API_KEY")
 
-    if not final_keys["GEMINI_API_KEY"]:
+    # Combine keys, giving precedence to UI keys and avoiding duplicates.
+    combined_gemini_keys = []
+    if ui_gemini_keys:
+        combined_gemini_keys.extend(ui_gemini_keys)
+    
+    if env_gemini_key and env_gemini_key not in combined_gemini_keys:
+        combined_gemini_keys.append(env_gemini_key)
+
+    if not combined_gemini_keys:
         raise ValueError("CRITICAL: Gemini API Key not found in UI or .env file.")
-        
+    
+    final_keys["GEMINI_API_KEYS"] = combined_gemini_keys
+    # --- END OF NEW LOGIC ---
+
+    # Logic for other keys remains the same
+    for key_name in ["OPENVERSE_API_KEY", "FLICKR_API_KEY"]:
+        ui_key = ui_keys.get(key_name)
+        if ui_key and ui_key.strip():
+            final_keys[key_name] = ui_key.strip()
+        else:
+            final_keys[key_name] = os.getenv(key_name)
+
     return final_keys
 
 # --- UI Helpers ---

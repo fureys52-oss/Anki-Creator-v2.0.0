@@ -452,6 +452,35 @@ class ImageFinder:
                 best_result = self._run_search_for_strategy(strategy, query_texts, clip_model, pdf_path, None, **kwargs)
                 if best_result.get("image_bytes"):
                     return self._finalize_image(best_result)
+
+        # --- NEW LOGIC (Task 3.2): PDF Page as Image Fallback ---
+        # This block only runs if all the above strategies have returned None.
+        
+        # We need to get the list of enabled sources from the kwargs.
+        # This will be passed down from generate_all_decks -> DeckProcessor -> find_best_image
+        enabled_sources = kwargs.get("image_sources_config", [])
+        
+        if "PDF Page as Image (Fallback)" in enabled_sources:
+            print("\n--- Tier 4: All other image sources failed. Trying PDF Page as Image (Fallback)... ---")
+            if pdf_path and full_source_page_numbers:
+                try:
+                    # Use the first page number from the card's source pages
+                    source_page_num = full_source_page_numbers[0]
+                    
+                    doc = fitz.open(pdf_path)
+                    if source_page_num - 1 < len(doc):
+                        page = doc.load_page(source_page_num - 1)
+                        pix = page.get_pixmap(dpi=200) # Render at a decent resolution
+                        img_bytes = pix.tobytes("png")
+                        
+                        result = {"image_bytes": img_bytes, "source": "PDF Page as Image (Fallback)", "score": 0.1} # Score is low as it's a fallback
+                        print(f"--- SUCCESS: Generated screenshot of page {source_page_num} as fallback image. ---")
+                        return self._finalize_image(result)
+                    else:
+                         print(f"--- WARNING: Fallback failed. Page {source_page_num} is out of bounds for the PDF.")
+                except Exception as e:
+                    print(f"--- WARNING: Fallback failed with an unexpected error: {e}")
+        # --- END NEW LOGIC ---
         
         print(f"\n--- FAILED: No image found from any source for any query variant. ---")
         return None

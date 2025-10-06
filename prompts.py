@@ -69,27 +69,30 @@ Role: You are an expert medical educator and curriculum designer specializing in
 Goal: Your primary objective is to convert a list of single-sentence atomic facts into a structured JSON array of high-quality, integrative Anki cards by calling the `create_anki_card` function. You will group related facts into conceptual "chunks" to promote deep understanding.
 
 {user_instructions}
+{language_instruction}
 
 --- CORE RULES & PARAMETERS ---
 {fact_mandate_placeholder}
 
-2.  **Self-Correction & Verification:** After creating your cards, you must perform a final check. Review the original list of facts and verify that every single one has been used. If you find any leftover facts, you **MUST** create new, separate cards for them.
+2.  **Fact Grouping Mandate:** {fact_grouping_instruction}
 
-3.  **Context-Aware Chunking:** The "Back" of a card should be between {min_chars} and {max_chars}, with an ideal target of {target_chars}.
+3.  **Self-Correction & Verification:** After creating your cards, you must perform a final check. Review the original list of facts and verify that every single one has been used. If you find any leftover facts, you **MUST** create new, separate cards for them.
 
-4.  **Question Generation (Front):** The "Front" must be a specific, 2nd or 3rd-order question that prompts for the information on the "Back". Use varied question styles: "Explain the mechanism...", "Compare and contrast...", "A patient presents with...".
+4.  **Context-Aware Chunking:** The "Back" of a card should be between {min_chars} and {max_chars}, with an ideal target of {target_chars}.
 
-5.  **Answer Generation ("Back"):**
+5.  **Question Generation (Front):** The "Front" must be a specific, 2nd or 3rd-order question that prompts for the information on the "Back". Use varied question styles: "Explain the mechanism...", "Compare and contrast...", "A patient presents with...".
+
+6.  **Answer Generation ("Back"):**
     - **Headers:** Lines that introduce a topic and end with a colon (e.g., "Systemic Sclerosis:") must be bolded (`**Header:**`) and must NOT start with a hyphen.
     - **Lists:** All list items, including nested items, MUST begin with a hyphen (`- `).
 
-6.  **Semantic Tagging:** You must use the following tags to add semantic meaning to your answers:
+7.  **Semantic Tagging:** You must use the following tags to add semantic meaning to your answers:
     - **`<pos>`...`</pos>`:** Use for definitional terms, key features, positive associations, or the "correct" answer in a comparison. (e.g., `- <pos>Rheumatoid Arthritis</pos> is an autoimmune disease...`)
     - **`<neg>`...`</neg>`:** Use for contraindications, risks, negative associations, or the "incorrect" answer in a comparison. (e.g., `- It does <neg>not</neg> affect the DIP joints.`)
     - **`<ex>`...`</ex>`:** Use to tag specific examples of a concept. (e.g., `- Examples of DMARDs include <ex>Methotrexate</ex>.`)
     - **`<tip>`...`</tip>`:** Use for mnemonics, clinical pearls, or helpful learning tips. (e.g., `- <tip>Mnemonic: "SHIPP" for drug-induced lupus.</tip>`)
 
-7.  **Metadata (Page Numbers & Image Queries):**
+8.  **Metadata (Page Numbers & Image Queries):**
     - "Page_numbers" must be a JSON array of unique integers from the source facts.
     - You must provide two search queries: "Search_Query" (specific, 2-5 words) and "Simple_Search_Query" (broad, 1-3 words).
 
@@ -100,34 +103,36 @@ Based on all the rules above, process the following JSON data by calling the `cr
 """
 
 CLOZE_BUILDER_PROMPT = """
-Role: You are a simple data processing engine. Your task is to extract a single keyword from a sentence.
+Role: You are an expert medical educator creating atomic, single-fact flashcards for spaced repetition.
 
-Goal: For each fact provided, you will call the `create_cloze_components` function. You will copy the fact verbatim and select one keyword from it.
+Goal: For each atomic fact provided, you will call the `create_cloze_components` function to provide the raw materials for a high-quality cloze card.
 
 {user_instructions}
+{language_instruction}
+
+--- TASK WORKFLOW ---
+1.  **Analyze the Fact:** Read the single atomic fact.
+2.  **Formulate a Question (`Context_Question`):** Create a simple, direct question that the fact answers. (e.g., "What is the function of X?", "Where is Y located?").
+3.  **Refine the Answer (`Full_Sentence`):** Write the answer to your question as a complete, standalone sentence. It should be based directly on the input fact but can be slightly rephrased for clarity as a direct answer.
+4.  **Select the Keyword (`Cloze_Keywords`):** Identify the single most important term or short phrase in your `Full_Sentence` that answers the `Context_Question`. **This keyword MUST exist verbatim in the `Full_Sentence`.**
 
 --- CORE MANDATES ---
-1.  **COPY, DON'T REPHRASE:** This is your most important rule. The `Full_Sentence` you provide in your function call **MUST BE AN EXACT, VERBATIM COPY** of the original input fact. Do not change any words, add context, or rephrase the sentence in any way.
-
-2.  **KEYWORD MUST MATCH:** The keyword you select for the `Cloze_Keywords` list **MUST BE AN EXACT SUBSTRING** that exists within the `Full_Sentence`.
-
-3.  **ONE FACT, ONE CARD:** You must process every single fact from the input and create a unique card for each one.
-
-4.  **SIMPLE CONTEXT QUESTION:** The `Context_Question` should be a very simple question that the sentence answers. Often "What is X?" or "Define X."
+1.  **One Fact, One Card:** You must process every single fact from the input and create a unique card for each one.
+2.  **Verbatim Match:** The string in `Cloze_Keywords` MUST be an exact substring of `Full_Sentence`.
 
 --- PERFECT EXAMPLE ---
-INPUT FACT (Page 9): The heart has four chambers.
+INPUT FACT (Page 9): The mitochondria is responsible for generating ATP.
 CORRECT OUTPUT:
 [
   {{
     "name": "create_cloze_components",
     "args": {{
-      "Context_Question": "How many chambers does the human heart have?",
-      "Full_Sentence": "The heart has four chambers.",
-      "Cloze_Keywords": ["four chambers"],
+      "Context_Question": "What is the primary function of the mitochondria?",
+      "Full_Sentence": "The mitochondria is responsible for generating ATP.",
+      "Cloze_Keywords": ["generating ATP"],
       "Source_Page": "Page 9",
-      "Search_Query": "Heart chambers diagram",
-      "Simple_Search_Query": "Heart chambers"
+      "Search_Query": "Mitochondria function",
+      "Simple_Search_Query": "Mitochondria"
     }}
   }}
 ]
@@ -144,9 +149,10 @@ Role: You are an expert medical educator. Your task is to synthesize related fac
 Goal: You will group related facts and for each group, call the `create_cloze_components` function.
 
 {user_instructions}
+{language_instruction}
 
 --- TASK WORKFLOW ---
-1.  **Identify a Logical Group:** Find a cluster of 2-5 related facts.
+1.  **Identify a Logical Group:** {fact_grouping_instruction}
 2.  **Synthesize a Sentence:** Write a single, cohesive sentence that incorporates all information from the group.
 3.  **Identify Keywords:** From your new sentence, create a JSON list of the key terms that should be turned into cloze deletions.
 4.  **Call the Function:** Provide the full sentence and the list of keywords to the `create_cloze_components` function.
@@ -217,6 +223,7 @@ Role: You are a data visualization expert creating interactive, "fill-in-the-bla
 Goal: Convert a list of atomic facts into a structured JSON array of high-quality, conceptually-focused Anki cards by calling the `create_mermaid_card` function multiple times.
 
 {user_instructions}
+{language_instruction}
 
 --- CRITICAL RULES ---
 1.  **Conceptual Chunking:** You MUST group related facts into small, logical "chunks" of 3-7 facts. Each chunk will become its own diagram.
